@@ -10,30 +10,29 @@ import re
 
 app = Flask(__name__)
 
-# 환경변수 불러오기
+# Redis 연결
 REDIS_URL = os.environ.get('REDIS_URL')
+redis_client = redis.from_url(REDIS_URL)
+
+# 외부 API 환경변수
 N8N_WEBHOOK_URL = os.environ.get('N8N_WEBHOOK_URL')
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 GPT_AGENT_URL = os.environ.get('GPT_AGENT_URL')
 
-# Redis 연결
-redis_client = redis.from_url(REDIS_URL)
-
-# 세션 만료 시간
 SESSION_EXPIRY = 3600
 
-# 인텐트 키워드
+# 인텐트 키워드 정의
 INTENTS = {
     'create': ['등록', '추가', '만들어', '잡아', '넣어', '생성'],
-    'update': ['수정', '변경', '바꿔', '업데이트'],
-    'delete': ['삭제', '지워', '취소'],
-    'read': ['조회', '확인', '보여줘', '알려줘']
+    'update': ['수정', '변경', '바꿔', '업데이트', '수정해'],
+    'delete': ['취소', '삭제', '지워', '없애', '취소해'],
+    'read': ['조회', '보여줘', '알려줘', '확인', '뭐가 있어', '일정 확인']
 }
 
-# 주요 필드 추출 함수
+# 유틸리티 함수
 def extract_title(text):
-    match = re.search(r'(회의|미팅|상담|방문|시공|공사)', text)
-    return match.group(1) if match else None
+    match = re.search(r'(\d+월\s*\d+일)?\s*(오전|오후)?\s*\d{1,2}시.*?\s*(회의|미팅|상담|방문|시공|공사)', text)
+    return match.group(3) if match else None
 
 def extract_date(text):
     dt = dateparser.parse(text, settings={
@@ -43,68 +42,75 @@ def extract_date(text):
     })
     if dt:
         return dt.isoformat()
-
-    # GPT Agent 호출 (timeout 10초 적용)
     try:
         headers = {'Authorization': f'Bearer {OPENAI_API_KEY}'}
         res = requests.post(GPT_AGENT_URL, json={'text': text}, headers=headers, timeout=10)
         if res.status_code == 200:
-            ai_result = res.json()
-            return ai_result.get('date')
+            return res.json().get('date')
     except Exception as e:
-        print(f"[extract_date] GPT 호출 실패: {e}")
+        print(f"extract_date 오류: {e}")
     return None
 
 def extract_category(text):
-    for keyword in ['회의', '미팅', '상담', '방문', '시공', '공사']:
-        if keyword in text:
-            return keyword
+    for cat in ['회의', '미팅', '상담', '방문', '시공', '공사']:
+        if cat in text:
+            return cat
     return None
 
-# GPT Agent 수동 호출
-def request_gpt_agent(text):
-    try:
-        headers = {'Authorization': f'Bearer {OPENAI_API_KEY}'}
-        res = requests.post(GPT_AGENT_URL, json={'text': text}, headers=headers, timeout=10)
-        return res.json()
-    except Exception as e:
-        print(f"[GPT Agent] 호출 실패: {e}")
-        return {}
-
-# 인텐트 판별
 def identify_intent(text):
+    text = text.lower()
     for intent, keywords in INTENTS.items():
         if any(k in text for k in keywords):
             return intent
     return 'create'
 
-# 트리거 진입점
+# n8n 전송 함수
+def send_to_n8n(data, intent):
+    try:
+        res = requests.post(N8N_WEBHOOK_URL, json=data, timeout=10)
+        res.raise_for_status()
+        return jsonify({'success': True, 'message': '자동화가 실행되었습니다.', 'n8n_response': res.json()})
+    except Exception as e:
+        print(f"send_to_n8n 오류: {e}")
+        return jsonify({'success': False, 'message': f'n8n 전송 실패: {str(e)}'})
+
+# /trigger 엔드포인트
 @app.route('/trigger', methods=['POST'])
 def trigger():
     try:
         data = request.json
         user_input = data.get('text', '')
-        user_id = data.get('user_id', 'default')
-        session_id = str(uuid.uuid4())
+        user_id = data.get('user_id', 'default_user')
         intent = identify_intent(user_input)
+        session_id = str(uuid.uuid4())
 
         if intent == 'create':
             return handle_create_intent(user_input, user_id, session_id)
-        return jsonify({'success': False, 'message': f'[{intent}] 인텐트는 아직 구현되지 않았습니다.'})
+        else:
+            return jsonify({'success': False, 'message': '현재는 create만 지원합니다.'})
     except Exception as e:
-        return jsonify({'success': False, 'message': f'오류 발생: {str(e)}'})
+        print(f"/trigger 오류: {e}")
+        return jsonify({'success': False, 'message': f'오류: {str(e)}'})
 
-# 일정 등록 핸들러
+# create intent 처리
 def handle_create_intent(text, user_id, session_id):
     title = extract_title(text)
     date = extract_date(text)
     category = extract_category(text)
 
-    if not all([title, date, category]):
-        gpt_data = request_gpt_agent(text)
-        title = title or gpt_data.get('title')
-        date = date or gpt_data.get('date')
-        category = category or gpt_data.get('category')
+    # 값 누락 시 GPT Agent 호출
+    missing = [k for k, v in {'title': title, 'date': date, 'category': category}.items() if not v]
+    if len(missing) >= 2:
+        try:
+            headers = {'Authorization': f'Bearer {OPENAI_API_KEY}'}
+            res = requests.post(GPT_AGENT_URL, json={'text': text}, headers=headers, timeout=10)
+            if res.status_code == 200:
+                ai_result = res.json()
+                title = title or ai_result.get('title')
+                date = date or ai_result.get('date')
+                category = category or ai_result.get('category')
+        except Exception as e:
+            print(f"GPT Agent 호출 오류: {e}")
 
     session_data = {
         'intent': 'create',
@@ -117,8 +123,8 @@ def handle_create_intent(text, user_id, session_id):
 
     redis_client.setex(f"jarvis:session:{session_id}", SESSION_EXPIRY, json.dumps(session_data))
 
-    if not all([title, date, category]):
-        missing = [k for k in ['title', 'date', 'category'] if not session_data.get(k)]
+    missing = [f for f in ['title', 'date', 'category'] if not session_data.get(f)]
+    if missing:
         return jsonify({
             'success': True,
             'session_id': session_id,
@@ -126,24 +132,27 @@ def handle_create_intent(text, user_id, session_id):
             'missing_fields': missing
         })
 
-    try:
-        res = requests.post(N8N_WEBHOOK_URL, json=session_data)
-        return jsonify({'success': True, 'message': '등록 완료', 'n8n_response': res.json()})
-    except Exception as e:
-        return jsonify({'success': False, 'message': f'n8n 전송 실패: {str(e)}'})
+    return send_to_n8n(session_data, 'create')
 
-# Agent 직접 호출용
+# /agent 엔드포인트
 @app.route('/agent', methods=['POST'])
 def agent():
     try:
         user_input = request.json.get('text', '')
+        title = extract_title(user_input) or "상담"
+        date = extract_date(user_input)
+        category = extract_category(user_input) or "기타"
         return jsonify({
-            'title': extract_title(user_input) or "상담",
-            'date': extract_date(user_input),
-            'category': extract_category(user_input) or "기타"
+            'title': title,
+            'date': date,
+            'category': category
         })
     except Exception as e:
         return jsonify({'error': str(e)})
 
-# WSGI
+# 로컬 실행
+if __name__ == '__main__':
+    app.run(debug=True)
+
+# WSGI 서버용
 app = app
