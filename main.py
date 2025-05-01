@@ -2,12 +2,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import openai
 import os
-from datetime import datetime
 import traceback
+import json
 
 app = FastAPI()
 
-# CORS 허용 설정
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,7 +14,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 환경변수에서 OpenAI 키 불러오기
+# 환경변수에서 API 키 가져오기
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 @app.get("/")
@@ -32,9 +31,8 @@ async def agent(request: Request):
         if not text:
             return {"error": "text 필드가 비어있습니다."}
 
-        # GPT 호출
         prompt = f"""다음 명령어를 분석해서 일정 등록을 위한 title, date, category를 JSON으로 반환해줘:
-        예시: '5월 2일 오후 3시에 성수동 시공 등록해줘' → 
+        예시: '5월 2일 오후 3시에 성수동 시공 등록해줘' →
         {{
           "title": "성수동",
           "date": "2025-05-02T15:00:00",
@@ -43,24 +41,19 @@ async def agent(request: Request):
         지금 명령어: {text}
         """
 
-        print("🧠 GPT 요청 시작")
         response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "너는 한국어 명령어를 구조화하는 AI야."},
+                {"role": "system", "content": "너는 한국어 명령어를 구조화하는 비서야."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.2
         )
-        print("🧠 GPT 응답 수신 완료")
 
         content = response.choices[0].message.content
         print("📦 GPT 응답 내용:", content)
 
-        # JSON 문자열 파싱 시도
-        import json
         result = json.loads(content)
-
         return result
 
     except Exception as e:
