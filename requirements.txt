@@ -1,5 +1,4 @@
-flask
-requests
-dateparser
-gunicorn
+fastapi
+uvicorn
 openai
+dateparser
