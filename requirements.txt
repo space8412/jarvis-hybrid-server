@@ -1,5 +1,3 @@
 flask
 requests
-redis==4.6.0
 dateparser
-gunicorn
