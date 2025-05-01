@@ -1,12 +1,13 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-import openai
+from openai import OpenAI
 import os
 import traceback
 import json
 
 app = FastAPI()
 
+# CORS 설정
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,8 +15,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 환경변수에서 API 키 가져오기
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# OpenAI 클라이언트 생성
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 @app.get("/")
 def root():
@@ -41,7 +42,7 @@ async def agent(request: Request):
         지금 명령어: {text}
         """
 
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "너는 한국어 명령어를 구조화하는 비서야."},
