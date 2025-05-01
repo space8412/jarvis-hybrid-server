@@ -4,7 +4,7 @@ from openai import OpenAI
 import os
 import traceback
 import json
-import requests  # ✅ 추가: n8n 전송용
+import requests  # n8n 전송용
 
 app = FastAPI()
 
@@ -57,13 +57,10 @@ async def agent(request: Request):
 
         result = json.loads(content)
 
-        # ✅ n8n Webhook으로 POST 전송
-        n8n_url = "https://themood.app.n8n.cloud/webhook/telegram-webhook"
-        try:
-            res = requests.post(n8n_url, json=result)
-            print(f"📡 n8n 전송 결과: {res.status_code}")
-        except Exception as post_err:
-            print(f"❌ n8n 전송 실패: {post_err}")
+        # n8n Webhook으로 결과 전송
+        webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-webhook"
+        n8n_response = requests.post(webhook_url, json=result)
+        print("📨 n8n 전송 응답:", n8n_response.status_code, n8n_response.text)
 
         return result
 
