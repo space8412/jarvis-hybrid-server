@@ -35,18 +35,21 @@ INTENTS = {
 # ======================== 유틸리티 함수 ============================
 
 def extract_title(text):
-    match = re.search(r'(\d+월\s*\d+일)?\s*(오전|오후)?\s*\d{1,2}시.*?\s*(회의|미팅|상담|방문|시공|공사)', text)
-    return match.group(3) if match else None
+    match = re.search(r'(회의|미팅|상담|방문|시공|공사)', text)
+    return match.group(1) if match else None
 
 def extract_date(text):
     dt = dateparser.parse(text, settings={
         'PREFER_DATES_FROM': 'future',
         'TIMEZONE': 'Asia/Seoul',
-        'TO_TIMEZONE': 'Asia/Seoul'
+        'TO_TIMEZONE': 'Asia/Seoul',
+        'RETURN_AS_TIMEZONE_AWARE': False
     })
-    if dt:
+    # 날짜 유효성 검사 추가
+    if dt and dt.year and dt.month and dt.day:
         return dt.isoformat()
 
+    # 실패 시 GPT Agent 호출
     try:
         headers = {'Authorization': f'Bearer {OPENAI_API_KEY}'}
         res = requests.post(GPT_AGENT_URL, json={'text': text}, headers=headers)
@@ -63,17 +66,6 @@ def extract_category(text):
         if cat in text:
             return cat
     return None
-
-def parse_date_input(text):
-    dt = dateparser.parse(text, settings={
-        'PREFER_DATES_FROM': 'future',
-        'TIMEZONE': 'Asia/Seoul',
-        'TO_TIMEZONE': 'Asia/Seoul'
-    })
-    return dt.isoformat() if dt else None
-
-def is_specific_identifier(identifier):
-    return isinstance(identifier, dict) and 'id' in identifier
 
 # ======================== 외부 연동 함수 ============================
 
