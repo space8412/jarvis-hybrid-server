@@ -1,46 +1,68 @@
-from flask import Flask, request, jsonify
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+import openai
 import os
-import dateparser
-import re
+from datetime import datetime
+import traceback
 
-app = Flask(__name__)
+app = FastAPI()
 
-@app.route('/agent', methods=['POST'])
-def agent():
+# CORS 허용 설정
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 환경변수에서 OpenAI 키 불러오기
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+@app.get("/")
+def root():
+    return {"message": "Jarvis server is running."}
+
+@app.post("/agent")
+async def agent(request: Request):
     try:
-        user_input = request.json.get('text', '')
-        title = extract_title(user_input) or "상담"
-        date = extract_date(user_input)
-        category = extract_category(user_input) or "기타"
+        data = await request.json()
+        print("📥 요청 데이터:", data)
 
-        return jsonify({
-            'title': title,
-            'date': date,
-            'category': category
-        })
+        text = data.get("text", "")
+        if not text:
+            return {"error": "text 필드가 비어있습니다."}
+
+        # GPT 호출
+        prompt = f"""다음 명령어를 분석해서 일정 등록을 위한 title, date, category를 JSON으로 반환해줘:
+        예시: '5월 2일 오후 3시에 성수동 시공 등록해줘' → 
+        {{
+          "title": "성수동",
+          "date": "2025-05-02T15:00:00",
+          "category": "시공"
+        }}
+        지금 명령어: {text}
+        """
+
+        print("🧠 GPT 요청 시작")
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "너는 한국어 명령어를 구조화하는 AI야."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.2
+        )
+        print("🧠 GPT 응답 수신 완료")
+
+        content = response.choices[0].message.content
+        print("📦 GPT 응답 내용:", content)
+
+        # JSON 문자열 파싱 시도
+        import json
+        result = json.loads(content)
+
+        return result
+
     except Exception as e:
-        return jsonify({'error': str(e)})
-
-def extract_title(text):
-    match = re.search(r'(회의|미팅|상담|방문|시공|공사)', text)
-    return match.group(1) if match else None
-
-def extract_date(text):
-    dt = dateparser.parse(text, settings={
-        'PREFER_DATES_FROM': 'future',
-        'TIMEZONE': 'Asia/Seoul',
-        'TO_TIMEZONE': 'Asia/Seoul'
-    })
-    return dt.isoformat() if dt else None
-
-def extract_category(text):
-    categories = ['회의', '미팅', '상담', '방문', '시공', '공사']
-    for cat in categories:
-        if cat in text:
-            return cat
-    return None
-
-if __name__ == '__main__':
-    app.run(debug=True)
-
-app = app
+        print("❌ 오류 발생:", traceback.format_exc())
+        return {"error": str(e), "trace": traceback.format_exc()}
