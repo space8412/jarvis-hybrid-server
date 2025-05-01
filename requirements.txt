@@ -1,0 +1,4 @@
+flask
+requests
+dateparser
+gunicorn
