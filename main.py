@@ -33,13 +33,20 @@ async def agent(request: Request):
         if not text:
             return {"error": "text 필드가 비어있습니다."}
 
-        prompt = f"""다음 명령어를 분석해서 일정 등록을 위한 title, date, category를 JSON으로 반환해줘:
+        prompt = f"""다음 명령어를 분석해서 일정 등록을 위한 title, date, category를 JSON으로 반환해줘.
+
+💡 아래 조건을 지켜서 분석해줘:
+- 논현동, 성수동, 합정동, 한남동, 청담동, 압구정동 등 실제 존재하는 서울 지역 지명을 기준으로 오타가 있으면 보정해줘.
+- 날짜와 시간도 한국어 표현(예: '오후 2시', '5월 10일')을 정확히 ISO 형식으로 변환해줘.
+- category는 시공, 미팅, 방문, 상담, 공사, 회의 중 하나로 분류해줘.
+
 예시: '5월 2일 오후 3시에 성수동 시공 등록해줘' →
 {{
   "title": "성수동",
   "date": "2025-05-02T15:00:00",
   "category": "시공"
 }}
+
 지금 명령어: {text}
 """
 
@@ -96,13 +103,20 @@ async def trigger(request: Request):
         if not text:
             return {"error": "text가 비어 있습니다."}
 
-        prompt = f"""다음 명령어를 분석해서 일정 등록을 위한 title, date, category를 JSON으로 반환해줘:
+        prompt = f"""다음 명령어를 분석해서 일정 등록을 위한 title, date, category를 JSON으로 반환해줘.
+
+💡 아래 조건을 지켜서 분석해줘:
+- 논현동, 성수동, 합정동, 한남동, 청담동, 압구정동 등 실제 존재하는 서울 지역 지명을 기준으로 오타가 있으면 보정해줘.
+- 날짜와 시간도 한국어 표현(예: '오후 2시', '5월 10일')을 정확히 ISO 형식으로 변환해줘.
+- category는 시공, 미팅, 방문, 상담, 공사, 회의 중 하나로 분류해줘.
+
 예시: '5월 2일 오후 3시에 성수동 시공 등록해줘' →
 {{
   "title": "성수동",
   "date": "2025-05-02T15:00:00",
   "category": "시공"
 }}
+
 지금 명령어: {text}
 """
 
