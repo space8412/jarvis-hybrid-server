@@ -58,6 +58,23 @@ def build_prompt(text: str) -> str:
 지금 명령어: {text}
 """
 
+def apply_time_correction(text, result):
+    print("🔍 명령어:", text)
+    print("📦 GPT 결과:", result)
+    try:
+        if "오후" in text and "T" in result.get("date", ""):
+            hour_str = result["date"].split("T")[1][:2]
+            if hour_str.isdigit() and int(hour_str) < 12:
+                fixed_hour = int(hour_str) + 12
+                result["date"] = result["date"].replace(f"T{hour_str}", f"T{fixed_hour:02d}")
+
+        # 오후 누락된 경우 T00:00:00 보정
+        if "T00:00:00" in result.get("date", "") and "오전" not in text:
+            result["date"] = result["date"].replace("T00:00:00", "T15:00:00")
+    except:
+        pass
+    return result
+
 @app.post("/agent")
 async def agent(request: Request):
     try:
@@ -79,13 +96,7 @@ async def agent(request: Request):
 
         content = response.choices[0].message.content
         result = json.loads(content)
-
-        # 오후 시간 보정 로직
-        if "오후" in text and "T" in result.get("date", ""):
-            hour_str = result["date"].split("T")[1][:2]
-            if hour_str.isdigit() and int(hour_str) < 12:
-                fixed_hour = int(hour_str) + 12
-                result["date"] = result["date"].replace(f"T{hour_str}", f"T{fixed_hour:02d}")
+        result = apply_time_correction(text, result)
 
         webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=result)
@@ -140,13 +151,7 @@ async def trigger(request: Request):
 
         content = response.choices[0].message.content
         result = json.loads(content)
-
-        # 오후 시간 보정 로직
-        if "오후" in text and "T" in result.get("date", ""):
-            hour_str = result["date"].split("T")[1][:2]
-            if hour_str.isdigit() and int(hour_str) < 12:
-                fixed_hour = int(hour_str) + 12
-                result["date"] = result["date"].replace(f"T{hour_str}", f"T{fixed_hour:02d}")
+        result = apply_time_correction(text, result)
 
         webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=result)
