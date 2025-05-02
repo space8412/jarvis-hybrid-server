@@ -5,6 +5,7 @@ import os
 import traceback
 import json
 import requests
+import tempfile
 
 app = FastAPI()
 
@@ -16,8 +17,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# OpenAI API 키로 클라이언트 초기화
+# API 키
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 @app.get("/")
 def root():
@@ -27,8 +29,6 @@ def root():
 async def agent(request: Request):
     try:
         data = await request.json()
-        print("📥 요청 데이터:", data)
-
         text = data.get("text", "")
         if not text:
             return {"error": "text 필드가 비어있습니다."}
@@ -53,26 +53,15 @@ async def agent(request: Request):
         )
 
         content = response.choices[0].message.content
-        print("📦 GPT 응답 내용:", content)
-
         result = json.loads(content)
 
-        # Webhook 전송: 중첩 구조로 감싸서 전송
-        payload = {
-            "body": {
-                "intent": "register_schedule",
-                **result
-            }
-        }
-
+        payload = {"body": {"intent": "register_schedule", **result}}
         webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=payload)
-        print("📨 n8n 전송 응답:", n8n_response.status_code, n8n_response.text)
 
         return payload
 
     except Exception as e:
-        print("❌ agent 오류:", traceback.format_exc())
         return {"error": str(e), "trace": traceback.format_exc()}
 
 @app.post("/trigger")
@@ -80,12 +69,32 @@ async def trigger(request: Request):
     try:
         data = await request.json()
         message = data.get("message", {})
-        text = message.get("text", "")
+        text = ""
+
+        if "voice" in message:
+            file_id = message["voice"]["file_id"]
+            file_info = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getFile?file_id={file_id}").json()
+            file_path = file_info["result"]["file_path"]
+            file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
+            response = requests.get(file_url)
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".ogg") as tmp_file:
+                tmp_file.write(response.content)
+                tmp_path = tmp_file.name
+
+            with open(tmp_path, "rb") as audio_file:
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    response_format="text"
+                )
+            text = transcript.strip()
+
+        else:
+            text = message.get("text", "")
 
         if not text:
-            return {"error": "텔레그램 메시지에 text가 없습니다."}
-
-        print("🤖 텔레그램 메시지 수신:", text)
+            return {"error": "text가 비어 있습니다."}
 
         prompt = f"""다음 명령어를 분석해서 일정 등록을 위한 title, date, category를 JSON으로 반환해줘:
 예시: '5월 2일 오후 3시에 성수동 시공 등록해줘' →
@@ -107,24 +116,13 @@ async def trigger(request: Request):
         )
 
         content = response.choices[0].message.content
-        print("📦 GPT 응답 내용:", content)
-
         result = json.loads(content)
 
-        # Webhook 전송: 중첩 구조로 감싸서 전송
-        payload = {
-            "body": {
-                "intent": "register_schedule",
-                **result
-            }
-        }
-
+        payload = {"body": {"intent": "register_schedule", **result}}
         webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=payload)
-        print("📨 n8n 전송 응답:", n8n_response.status_code, n8n_response.text)
 
         return payload
 
     except Exception as e:
-        print("❌ trigger 오류:", traceback.format_exc())
         return {"error": str(e), "trace": traceback.format_exc()}
