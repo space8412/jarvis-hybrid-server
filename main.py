@@ -4,7 +4,7 @@ from openai import OpenAI
 import os
 import traceback
 import json
-import requests  # n8n 전송용
+import requests
 
 app = FastAPI()
 
@@ -68,7 +68,7 @@ async def agent(request: Request):
         print("❌ 오류 발생:", traceback.format_exc())
         return {"error": str(e), "trace": traceback.format_exc()}
 
-# ✅ 텔레그램 Webhook 수신용 엔드포인트
+# ✅ 새로 추가: 텔레그램 메시지를 받는 전용 엔드포인트
 @app.post("/trigger")
 async def trigger(request: Request):
     try:
@@ -81,7 +81,7 @@ async def trigger(request: Request):
 
         print("🤖 텔레그램 메시지 수신:", text)
 
-        # /agent 처리 방식 재사용
+        # /agent 엔드포인트 재활용
         agent_request = Request(
             scope=request.scope,
             receive=request._receive,
