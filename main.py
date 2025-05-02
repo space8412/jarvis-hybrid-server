@@ -67,3 +67,29 @@ async def agent(request: Request):
     except Exception as e:
         print("❌ 오류 발생:", traceback.format_exc())
         return {"error": str(e), "trace": traceback.format_exc()}
+
+# ✅ 텔레그램 Webhook 수신용 엔드포인트
+@app.post("/trigger")
+async def trigger(request: Request):
+    try:
+        data = await request.json()
+        message = data.get("message", {})
+        text = message.get("text", "")
+
+        if not text:
+            return {"error": "텔레그램 메시지에 text가 없습니다."}
+
+        print("🤖 텔레그램 메시지 수신:", text)
+
+        # /agent 처리 방식 재사용
+        agent_request = Request(
+            scope=request.scope,
+            receive=request._receive,
+            send=request._send,
+            json=lambda: {"text": text}
+        )
+        return await agent(agent_request)
+
+    except Exception as e:
+        print("❌ trigger 오류:", traceback.format_exc())
+        return {"error": str(e), "trace": traceback.format_exc()}
