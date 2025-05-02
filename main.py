@@ -18,7 +18,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API 키
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
@@ -78,11 +77,10 @@ async def agent(request: Request):
         content = response.choices[0].message.content
         result = json.loads(content)
 
-        payload = {"body": result}
         webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-webhook"
-        n8n_response = requests.post(webhook_url, json=payload)
+        n8n_response = requests.post(webhook_url, json=result)
 
-        return payload
+        return result
 
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
@@ -163,11 +161,10 @@ async def trigger(request: Request):
         content = response.choices[0].message.content
         result = json.loads(content)
 
-        payload = {"body": result}
         webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-webhook"
-        n8n_response = requests.post(webhook_url, json=payload)
+        n8n_response = requests.post(webhook_url, json=result)
 
-        return payload
+        return result
 
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
