@@ -19,12 +19,10 @@ app.add_middleware(
 # OpenAI API 키로 클라이언트 초기화
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# 서버 상태 확인용
 @app.get("/")
 def root():
     return {"message": "Jarvis server is running."}
 
-# 수동 분석용 (예: Postman에서 직접 text 보내는 경우)
 @app.post("/agent")
 async def agent(request: Request):
     try:
@@ -35,7 +33,6 @@ async def agent(request: Request):
         if not text:
             return {"error": "text 필드가 비어있습니다."}
 
-        # GPT 프롬프트 구성
         prompt = f"""다음 명령어를 분석해서 일정 등록을 위한 title, date, category를 JSON으로 반환해줘:
 예시: '5월 2일 오후 3시에 성수동 시공 등록해줘' →
 {{
@@ -60,8 +57,14 @@ async def agent(request: Request):
 
         result = json.loads(content)
 
-        # Webhook 전송 시 intent 포함, 중첩 없이 전송
-        payload = {"intent": "register_schedule", **result}
+        # Webhook 전송: 중첩 구조로 감싸서 전송
+        payload = {
+            "body": {
+                "intent": "register_schedule",
+                **result
+            }
+        }
+
         webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=payload)
         print("📨 n8n 전송 응답:", n8n_response.status_code, n8n_response.text)
@@ -72,7 +75,6 @@ async def agent(request: Request):
         print("❌ agent 오류:", traceback.format_exc())
         return {"error": str(e), "trace": traceback.format_exc()}
 
-# 텔레그램 자동 트리거
 @app.post("/trigger")
 async def trigger(request: Request):
     try:
@@ -85,7 +87,6 @@ async def trigger(request: Request):
 
         print("🤖 텔레그램 메시지 수신:", text)
 
-        # GPT 프롬프트 구성
         prompt = f"""다음 명령어를 분석해서 일정 등록을 위한 title, date, category를 JSON으로 반환해줘:
 예시: '5월 2일 오후 3시에 성수동 시공 등록해줘' →
 {{
@@ -110,8 +111,14 @@ async def trigger(request: Request):
 
         result = json.loads(content)
 
-        # Webhook 전송 시 intent 포함, 중첩 없이 전송
-        payload = {"intent": "register_schedule", **result}
+        # Webhook 전송: 중첩 구조로 감싸서 전송
+        payload = {
+            "body": {
+                "intent": "register_schedule",
+                **result
+            }
+        }
+
         webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=payload)
         print("📨 n8n 전송 응답:", n8n_response.status_code, n8n_response.text)
