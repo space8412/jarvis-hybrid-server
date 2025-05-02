@@ -60,18 +60,19 @@ async def agent(request: Request):
 
         result = json.loads(content)
 
-        # n8n Webhook으로 결과 전송
+        # Webhook 전송 시 intent 포함, 중첩 없이 전송
+        payload = {"intent": "register_schedule", **result}
         webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-webhook"
-        n8n_response = requests.post(webhook_url, json=result)
+        n8n_response = requests.post(webhook_url, json=payload)
         print("📨 n8n 전송 응답:", n8n_response.status_code, n8n_response.text)
 
-        return result
+        return payload
 
     except Exception as e:
         print("❌ agent 오류:", traceback.format_exc())
         return {"error": str(e), "trace": traceback.format_exc()}
 
-# 텔레그램 메시지를 수신하는 자동 트리거 경로
+# 텔레그램 자동 트리거
 @app.post("/trigger")
 async def trigger(request: Request):
     try:
@@ -84,7 +85,7 @@ async def trigger(request: Request):
 
         print("🤖 텔레그램 메시지 수신:", text)
 
-        # 분석 프롬프트 구성
+        # GPT 프롬프트 구성
         prompt = f"""다음 명령어를 분석해서 일정 등록을 위한 title, date, category를 JSON으로 반환해줘:
 예시: '5월 2일 오후 3시에 성수동 시공 등록해줘' →
 {{
@@ -109,12 +110,13 @@ async def trigger(request: Request):
 
         result = json.loads(content)
 
-        # n8n Webhook으로 결과 전송
+        # Webhook 전송 시 intent 포함, 중첩 없이 전송
+        payload = {"intent": "register_schedule", **result}
         webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-webhook"
-        n8n_response = requests.post(webhook_url, json=result)
+        n8n_response = requests.post(webhook_url, json=payload)
         print("📨 n8n 전송 응답:", n8n_response.status_code, n8n_response.text)
 
-        return result
+        return payload
 
     except Exception as e:
         print("❌ trigger 오류:", traceback.format_exc())
