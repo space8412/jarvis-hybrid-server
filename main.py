@@ -6,6 +6,7 @@ import traceback
 import json
 import requests
 import tempfile
+from datetime import datetime
 
 app = FastAPI()
 
@@ -33,7 +34,10 @@ async def agent(request: Request):
         if not text:
             return {"error": "text 필드가 비어있습니다."}
 
-        prompt = f"""다음 명령어를 분석해서 일정 등록을 위한 title, date, category를 JSON으로 반환해줘.
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        prompt = f"""오늘 날짜는 {today}야.
+다음 명령어를 분석해서 일정 등록을 위한 title, date, category를 JSON으로 반환해줘.
 
 💡 아래 조건을 지켜서 분석해줘:
 - 논현동, 성수동, 합정동, 한남동, 청담동, 압구정동 등 실제 존재하는 서울 지역 지명을 기준으로 오타가 있으면 보정해줘.
@@ -107,7 +111,10 @@ async def trigger(request: Request):
         if not text:
             return {"error": "text가 비어 있습니다."}
 
-        prompt = f"""다음 명령어를 분석해서 일정 등록을 위한 title, date, category를 JSON으로 반환해줘.
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        prompt = f"""오늘 날짜는 {today}야.
+다음 명령어를 분석해서 일정 등록을 위한 title, date, category를 JSON으로 반환해줘.
 
 💡 아래 조건을 지켜서 분석해줘:
 - 논현동, 성수동, 합정동, 한남동, 청담동, 압구정동 등 실제 존재하는 서울 지역 지명을 기준으로 오타가 있으면 보정해줘.
