@@ -77,8 +77,6 @@ def build_prompt(text: str) -> str:
 
 
 def apply_time_correction(text, result):
-    print("🔍 명령어:", text)
-    print("📦 GPT 결과:", result)
     try:
         if "오후" in text and "T" in result.get("date", ""):
             hour_str = result["date"].split("T")[1][:2]
@@ -117,7 +115,8 @@ async def agent(request: Request):
         result = apply_time_correction(text, result)
         result["category"] = classify_category(text)
 
-        webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
+        # ✅ 분석 결과를 n8n Webhook으로 전송
+        webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-schedule"
         n8n_response = requests.post(webhook_url, json=result)
 
         return result
@@ -174,7 +173,7 @@ async def trigger(request: Request):
         result = apply_time_correction(text, result)
         result["category"] = classify_category(text)
 
-        webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-webhook"
+        webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-schedule"
         n8n_response = requests.post(webhook_url, json=result)
 
         return result
