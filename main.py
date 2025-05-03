@@ -116,7 +116,7 @@ async def agent(request: Request):
         result["category"] = classify_category(text)
 
         # ✅ 분석 결과를 n8n Webhook으로 전송
-        webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-schedule"
+        webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=result)
 
         return result
@@ -173,7 +173,7 @@ async def trigger(request: Request):
         result = apply_time_correction(text, result)
         result["category"] = classify_category(text)
 
-        webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-schedule"
+        webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=result)
 
         return result
