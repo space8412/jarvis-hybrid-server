@@ -22,9 +22,26 @@ app.add_middleware(
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
+
+def classify_category(text):
+    category_keywords = {
+        "회의": ["회의", "미팅", "줌", "온라인회의", "컨퍼런스", "팀"],
+        "상담": ["상담", "컨설팅", "문의", "점검", "전화상담", "방문상담"],
+        "시공": ["시공", "설치", "공사", "작업", "철거", "시공회의"],
+        "현장방문": ["방문", "현장", "측량", "실측", "현장확인", "공정확인"],
+        "내부업무": ["테스트", "점검", "확인", "내부회의", "회의실예약"]
+    }
+    for category, keywords in category_keywords.items():
+        for keyword in keywords:
+            if keyword in text:
+                return category
+    return "미정"
+
+
 @app.get("/")
 def root():
     return {"message": "Jarvis server is running."}
+
 
 def build_prompt(text: str) -> str:
     today = datetime.now(tz=tz.gettz("Asia/Seoul")).strftime("%Y-%m-%d")
@@ -58,6 +75,7 @@ def build_prompt(text: str) -> str:
 지금 명령어: {text}
 """
 
+
 def apply_time_correction(text, result):
     print("🔍 명령어:", text)
     print("📦 GPT 결과:", result)
@@ -68,12 +86,12 @@ def apply_time_correction(text, result):
                 fixed_hour = int(hour_str) + 12
                 result["date"] = result["date"].replace(f"T{hour_str}", f"T{fixed_hour:02d}")
 
-        # 오후 누락된 경우 T00:00:00 보정
         if "T00:00:00" in result.get("date", "") and "오전" not in text:
             result["date"] = result["date"].replace("T00:00:00", "T15:00:00")
     except:
         pass
     return result
+
 
 @app.post("/agent")
 async def agent(request: Request):
@@ -97,6 +115,7 @@ async def agent(request: Request):
         content = response.choices[0].message.content
         result = json.loads(content)
         result = apply_time_correction(text, result)
+        result["category"] = classify_category(text)
 
         webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=result)
@@ -105,6 +124,7 @@ async def agent(request: Request):
 
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
+
 
 @app.post("/trigger")
 async def trigger(request: Request):
@@ -152,6 +172,7 @@ async def trigger(request: Request):
         content = response.choices[0].message.content
         result = json.loads(content)
         result = apply_time_correction(text, result)
+        result["category"] = classify_category(text)
 
         webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=result)
