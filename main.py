@@ -117,7 +117,7 @@ async def agent(request: Request):
         result = apply_time_correction(text, result)
         result["category"] = classify_category(text)
 
-        webhook_url = "https://themood.app.n8n.cloud/webhook/telegram-webhook"
+        webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=result)
 
         return result
