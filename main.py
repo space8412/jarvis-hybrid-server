@@ -91,6 +91,11 @@ def apply_time_correction(text, result):
     return result
 
 
+def send_to_n8n(result):
+    webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
+    requests.post(webhook_url, json=result)
+
+
 @app.post("/agent")
 async def agent(request: Request):
     try:
@@ -115,10 +120,7 @@ async def agent(request: Request):
         result = apply_time_correction(text, result)
         result["category"] = classify_category(text)
 
-        # ✅ 분석 결과를 n8n Webhook으로 전송
-        webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
-        n8n_response = requests.post(webhook_url, json=result)
-
+        send_to_n8n(result)
         return result
 
     except Exception as e:
@@ -173,9 +175,7 @@ async def trigger(request: Request):
         result = apply_time_correction(text, result)
         result["category"] = classify_category(text)
 
-        webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
-        n8n_response = requests.post(webhook_url, json=result)
-
+        send_to_n8n(result)
         return result
 
     except Exception as e:
