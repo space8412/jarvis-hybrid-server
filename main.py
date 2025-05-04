@@ -22,7 +22,6 @@ app.add_middleware(
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-
 def classify_category(text):
     category_keywords = {
         "회의": ["회의", "미팅", "줌", "온라인회의", "컨퍼런스", "팀"],
@@ -37,11 +36,9 @@ def classify_category(text):
                 return category
     return "미정"
 
-
 @app.get("/")
 def root():
     return {"message": "Jarvis server is running."}
-
 
 def build_prompt(text: str) -> str:
     today = datetime.now(tz=tz.gettz("Asia/Seoul")).strftime("%Y-%m-%d")
@@ -75,7 +72,6 @@ def build_prompt(text: str) -> str:
 지금 명령어: {text}
 """
 
-
 def apply_time_correction(text, result):
     try:
         if "오후" in text and "T" in result.get("date", ""):
@@ -89,12 +85,6 @@ def apply_time_correction(text, result):
     except:
         pass
     return result
-
-
-def send_to_n8n(result):
-    webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
-    requests.post(webhook_url, json=result)
-
 
 @app.post("/agent")
 async def agent(request: Request):
@@ -120,12 +110,13 @@ async def agent(request: Request):
         result = apply_time_correction(text, result)
         result["category"] = classify_category(text)
 
-        send_to_n8n(result)
+        webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
+        n8n_response = requests.post(webhook_url, json=result)
+
         return result
 
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
-
 
 @app.post("/trigger")
 async def trigger(request: Request):
@@ -152,7 +143,6 @@ async def trigger(request: Request):
                     response_format="text"
                 )
             text = transcript.strip()
-
         else:
             text = message.get("text", "")
 
@@ -175,8 +165,18 @@ async def trigger(request: Request):
         result = apply_time_correction(text, result)
         result["category"] = classify_category(text)
 
-        send_to_n8n(result)
-        return result
+        # ✅ 여기가 핵심: intent 등을 루트에 두는 구조로 전달
+        payload = {
+            "intent": result.get("intent", ""),
+            "title": result.get("title", ""),
+            "date": result.get("date", ""),
+            "category": result.get("category", "")
+        }
+
+        webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
+        n8n_response = requests.post(webhook_url, json=payload)
+
+        return payload
 
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
