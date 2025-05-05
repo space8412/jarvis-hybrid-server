@@ -42,7 +42,24 @@ def root():
 
 def build_prompt(text: str) -> str:
     today = datetime.now(tz=tz.gettz("Asia/Seoul")).strftime("%Y-%m-%d")
-    return f"""오늘 날짜는 {today}야.
+    is_update = "수정" in text or "변경" in text or "바꿔" in text
+
+    if is_update:
+        return f"""오늘 날짜는 {today}야.
+다음 명령어는 일정을 수정하려는 요청이야. 아래 항목을 JSON 형식으로 분석해줘:
+
+- intent: 항상 \"update_schedule\"
+- origin_title: 수정 전 일정 제목
+- origin_date: 수정 전 일정 시간 (ISO 8601)
+- title: 새로운 일정 제목 (같으면 그대로)
+- date: 새로운 일정 시간 (ISO 8601)
+- category: 회의, 상담, 현장방문 등으로 분류
+
+지금 명령어: {text}
+JSON만 출력해줘.
+"""
+    else:
+        return f"""오늘 날짜는 {today}야.
 다음 명령어를 분석해서 intent, title, date, category를 JSON으로 반환해줘.
 
 💡 아래 조건을 지켜서 분석해줘:
@@ -51,7 +68,7 @@ def build_prompt(text: str) -> str:
 - date는 ISO 8601 형식으로 변환해줘.
 - category는 시공, 미팅, 상담, 공사, 회의 등으로 지정해줘.
 - 사용자가 시간 없이 날짜만 말한 경우, 해당 날짜를 종일 일정으로 처리해줘.
-- "오늘", "내일" 같은 표현은 오늘 날짜 {today} 기준으로 계산해줘.
+- \"오늘\", \"내일\" 같은 표현은 오늘 날짜 {today} 기준으로 계산해줘.
 
 예시: '5월 2일 오후 3시에 성수동 시공 등록해줘' →
 {{
@@ -82,6 +99,9 @@ def apply_time_correction(text, result):
 
         if "T00:00:00" in result.get("date", "") and "오전" not in text:
             result["date"] = result["date"].replace("T00:00:00", "T15:00:00")
+
+        if result.get("origin_date") and "T00:00:00" in result["origin_date"] and "오전" not in text:
+            result["origin_date"] = result["origin_date"].replace("T00:00:00", "T15:00:00")
     except:
         pass
     return result
@@ -165,18 +185,10 @@ async def trigger(request: Request):
         result = apply_time_correction(text, result)
         result["category"] = classify_category(text)
 
-        # ✅ 여기가 핵심: intent 등을 루트에 두는 구조로 전달
-        payload = {
-            "intent": result.get("intent", ""),
-            "title": result.get("title", ""),
-            "date": result.get("date", ""),
-            "category": result.get("category", "")
-        }
-
         webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
-        n8n_response = requests.post(webhook_url, json=payload)
+        n8n_response = requests.post(webhook_url, json=result)
 
-        return payload
+        return result
 
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
