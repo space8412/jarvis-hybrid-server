@@ -1,5 +1,7 @@
 fastapi
 uvicorn
 openai
-dateparser
+python-dateutil
 requests
+python-dotenv
+dateparser
