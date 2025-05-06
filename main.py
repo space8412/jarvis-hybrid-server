@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
 import os
 import traceback
@@ -18,6 +19,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# APK 정적 경로 추가
+app.mount("/apk", StaticFiles(directory="apk"), name="apk")
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -48,7 +52,7 @@ def build_prompt(text: str) -> str:
         return f"""오늘 날짜는 {today}야.
 다음 명령어는 일정을 수정하려는 요청이야. 아래 항목을 JSON 형식으로 분석해줘:
 
-- intent: 항상 "update_schedule"
+- intent: 항상 \"update_schedule\"
 - origin_title: 수정 전 일정 제목
 - origin_date: 수정 전 일정 시간 (ISO 8601)
 - title: 새로운 일정 제목 (같으면 그대로)
@@ -68,7 +72,7 @@ JSON만 출력해줘.
 - date는 ISO 8601 형식으로 변환해줘.
 - category는 시공, 미팅, 상담, 공사, 회의 등으로 지정해줘.
 - 사용자가 시간 없이 날짜만 말한 경우, 해당 날짜를 종일 일정으로 처리해줘.
-- "오늘", "내일" 같은 표현은 오늘 날짜 {today} 기준으로 계산해줘.
+- \"오늘\", \"내일\" 같은 표현은 오늘 날짜 {today} 기준으로 계산해줘.
 
 예시: '5월 2일 오후 3시에 성수동 시공 등록해줘' →
 {{
@@ -130,7 +134,6 @@ async def agent(request: Request):
         result = apply_time_correction(text, result)
         result["category"] = classify_category(text)
 
-        # 🔧 origin_date 자동 보정
         if "origin_date" not in result or not result["origin_date"]:
             result["origin_date"] = result.get("date", "")
 
@@ -189,7 +192,6 @@ async def trigger(request: Request):
         result = apply_time_correction(text, result)
         result["category"] = classify_category(text)
 
-        # 🔧 origin_date 자동 보정
         if "origin_date" not in result or not result["origin_date"]:
             result["origin_date"] = result.get("date", "")
 
@@ -200,4 +202,3 @@ async def trigger(request: Request):
 
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
-
