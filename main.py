@@ -7,7 +7,7 @@ import traceback
 import json
 import requests
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil import tz
 
 app = FastAPI()
@@ -125,6 +125,16 @@ async def agent(request: Request):
         if "origin_title" not in result or not result["origin_title"]:
             result["origin_title"] = result.get("title", "")
 
+        # ✅ start / end 자동 생성
+        try:
+            if result.get("date"):
+                start = datetime.fromisoformat(result["date"])
+                result["start"] = result["date"]
+                result["end"] = (start + timedelta(hours=1)).isoformat()
+        except:
+            result["start"] = result.get("date", "")
+            result["end"] = result.get("date", "")
+
         webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=result)
 
@@ -185,6 +195,16 @@ async def trigger(request: Request):
             result["origin_date"] = result.get("date", "")
         if "origin_title" not in result or not result["origin_title"]:
             result["origin_title"] = result.get("title", "")
+
+        # ✅ start / end 자동 생성
+        try:
+            if result.get("date"):
+                start = datetime.fromisoformat(result["date"])
+                result["start"] = result["date"]
+                result["end"] = (start + timedelta(hours=1)).isoformat()
+        except:
+            result["start"] = result.get("date", "")
+            result["end"] = result.get("date", "")
 
         webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=result)
