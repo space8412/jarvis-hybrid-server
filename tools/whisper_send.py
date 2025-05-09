@@ -1,13 +1,14 @@
-import requests
 import os
+import requests
 
 def send_to_whisper(audio_path: str) -> str:
+    api_key = os.getenv("WHISPER_API_KEY")  # ✅ Whisper 전용 키
+
+    if not api_key:
+        raise EnvironmentError("WHISPER_API_KEY not found in environment variables")
+
     if not os.path.exists(audio_path):
         raise FileNotFoundError(f"File not found: {audio_path}")
-
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        raise EnvironmentError("환경변수 OPENAI_API_KEY가 설정되지 않았습니다.")
 
     with open(audio_path, "rb") as audio_file:
         response = requests.post(
