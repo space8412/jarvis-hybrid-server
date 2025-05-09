@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
@@ -9,6 +9,7 @@ import requests
 import tempfile
 from datetime import datetime, timedelta
 from dateutil import tz
+from tools import whisper  # ✅ whisper 모듈 임포트 추가
 
 app = FastAPI()
 
@@ -44,6 +45,14 @@ def classify_category(text):
 @app.get("/")
 def root():
     return {"message": "Jarvis server is running."}
+
+@app.post("/voice")
+async def transcribe_voice(file: UploadFile = File(...)):
+    try:
+        result = await whisper.transcribe(file)
+        return {"status": "success", "text": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 def build_prompt(text: str) -> str:
     today = datetime.now(tz=tz.gettz("Asia/Seoul")).strftime("%Y-%m-%d")
@@ -119,21 +128,15 @@ async def agent(request: Request):
         result = apply_time_correction(text, result)
         result["category"] = classify_category(text)
 
-        # ✅ origin 필드 자동 보정
         if "origin_date" not in result or not result["origin_date"]:
             result["origin_date"] = result.get("date", "")
         if "origin_title" not in result or not result["origin_title"]:
             result["origin_title"] = result.get("title", "")
 
-        # ✅ start / end 자동 생성
-        try:
-            if result.get("date"):
-                start = datetime.fromisoformat(result["date"])
-                result["start"] = result["date"]
-                result["end"] = (start + timedelta(hours=1)).isoformat()
-        except:
-            result["start"] = result.get("date", "")
-            result["end"] = result.get("date", "")
+        if result.get("date"):
+            start = datetime.fromisoformat(result["date"])
+            result["start"] = result["date"]
+            result["end"] = (start + timedelta(hours=1)).isoformat()
 
         webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=result)
@@ -190,21 +193,15 @@ async def trigger(request: Request):
         result = apply_time_correction(text, result)
         result["category"] = classify_category(text)
 
-        # ✅ origin 필드 자동 보정
         if "origin_date" not in result or not result["origin_date"]:
             result["origin_date"] = result.get("date", "")
         if "origin_title" not in result or not result["origin_title"]:
             result["origin_title"] = result.get("title", "")
 
-        # ✅ start / end 자동 생성
-        try:
-            if result.get("date"):
-                start = datetime.fromisoformat(result["date"])
-                result["start"] = result["date"]
-                result["end"] = (start + timedelta(hours=1)).isoformat()
-        except:
-            result["start"] = result.get("date", "")
-            result["end"] = result.get("date", "")
+        if result.get("date"):
+            start = datetime.fromisoformat(result["date"])
+            result["start"] = result["date"]
+            result["end"] = (start + timedelta(hours=1)).isoformat()
 
         webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=result)
