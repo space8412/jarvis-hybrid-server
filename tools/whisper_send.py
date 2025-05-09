@@ -1,11 +1,10 @@
-import os
 import requests
+import os
 
 def send_to_whisper(audio_path: str) -> str:
-    api_key = os.getenv("WHISPER_API_KEY")  # ✅ Whisper 전용 키
-
+    api_key = os.getenv("WHISPER_API_KEY")  # 🔹 환경변수에서 키 불러오기
     if not api_key:
-        raise EnvironmentError("WHISPER_API_KEY not found in environment variables")
+        raise Exception("WHISPER_API_KEY 환경변수가 설정되어 있지 않습니다.")
 
     if not os.path.exists(audio_path):
         raise FileNotFoundError(f"File not found: {audio_path}")
