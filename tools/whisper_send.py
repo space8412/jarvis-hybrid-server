@@ -10,10 +10,12 @@ def transcribe(file_obj) -> str:
     if not WHISPER_API_KEY:
         raise Exception("Whisper API 키가 설정되지 않았습니다.")
 
+    # 임시 파일로 저장
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
         tmp.write(file_obj.file.read())
         tmp_path = tmp.name
 
+    # Whisper API 호출
     with open(tmp_path, "rb") as audio_file:
         response = requests.post(
             "https://api.openai.com/v1/audio/transcriptions",
