@@ -9,7 +9,7 @@ import requests
 import tempfile
 from datetime import datetime, timedelta
 from dateutil import tz
-from tools import whisper  # ✅ whisper 모듈 임포트 추가
+from tools import whisper_send as whisper  # ✅ whisper 모듈 임포트 수정
 
 app = FastAPI()
 
