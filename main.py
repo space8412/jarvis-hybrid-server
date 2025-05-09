@@ -9,7 +9,7 @@ import requests
 import tempfile
 from datetime import datetime, timedelta
 from dateutil import tz
-from tools import whisper_send as whisper  # ✅ whisper 모듈 임포트 수정
+from tools import whisper_send as whisper  # ✅ whisper 모듈 임포트
 
 app = FastAPI()
 
@@ -49,7 +49,7 @@ def root():
 @app.post("/voice")
 async def transcribe_voice(file: UploadFile = File(...)):
     try:
-        result = await whisper.transcribe(file)
+        result = whisper.transcribe(file)  # ✅ await 제거
         return {"status": "success", "text": result}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -94,10 +94,8 @@ def apply_time_correction(text, result):
             if hour_str.isdigit() and int(hour_str) < 12:
                 fixed_hour = int(hour_str) + 12
                 result["date"] = result["date"].replace(f"T{hour_str}", f"T{fixed_hour:02d}")
-
         if "T00:00:00" in result.get("date", "") and "오전" not in text:
             result["date"] = result["date"].replace("T00:00:00", "T15:00:00")
-
         if result.get("origin_date") and "T00:00:00" in result["origin_date"] and "오전" not in text:
             result["origin_date"] = result["origin_date"].replace("T00:00:00", "T15:00:00")
     except:
@@ -113,7 +111,6 @@ async def agent(request: Request):
             return {"error": "text 필드가 비어있습니다."}
 
         prompt = build_prompt(text)
-
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
@@ -122,27 +119,21 @@ async def agent(request: Request):
             ],
             temperature=0.2
         )
-
         content = response.choices[0].message.content
         result = json.loads(content)
         result = apply_time_correction(text, result)
         result["category"] = classify_category(text)
-
         if "origin_date" not in result or not result["origin_date"]:
             result["origin_date"] = result.get("date", "")
         if "origin_title" not in result or not result["origin_title"]:
             result["origin_title"] = result.get("title", "")
-
         if result.get("date"):
             start = datetime.fromisoformat(result["date"])
             result["start"] = result["date"]
             result["end"] = (start + timedelta(hours=1)).isoformat()
-
         webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=result)
-
         return result
-
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
 
@@ -152,18 +143,15 @@ async def trigger(request: Request):
         data = await request.json()
         message = data.get("message", {})
         text = ""
-
         if "voice" in message:
             file_id = message["voice"]["file_id"]
             file_info = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getFile?file_id={file_id}").json()
             file_path = file_info["result"]["file_path"]
             file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
             response = requests.get(file_url)
-
             with tempfile.NamedTemporaryFile(delete=False, suffix=".ogg") as tmp_file:
                 tmp_file.write(response.content)
                 tmp_path = tmp_file.name
-
             with open(tmp_path, "rb") as audio_file:
                 transcript = client.audio.transcriptions.create(
                     model="whisper-1",
@@ -173,12 +161,9 @@ async def trigger(request: Request):
             text = transcript.strip()
         else:
             text = message.get("text", "")
-
         if not text:
             return {"error": "text가 비어 있습니다."}
-
         prompt = build_prompt(text)
-
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
@@ -187,26 +172,20 @@ async def trigger(request: Request):
             ],
             temperature=0.2
         )
-
         content = response.choices[0].message.content
         result = json.loads(content)
         result = apply_time_correction(text, result)
         result["category"] = classify_category(text)
-
         if "origin_date" not in result or not result["origin_date"]:
             result["origin_date"] = result.get("date", "")
         if "origin_title" not in result or not result["origin_title"]:
             result["origin_title"] = result.get("title", "")
-
         if result.get("date"):
             start = datetime.fromisoformat(result["date"])
             result["start"] = result["date"]
             result["end"] = (start + timedelta(hours=1)).isoformat()
-
         webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
         n8n_response = requests.post(webhook_url, json=result)
-
         return result
-
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
