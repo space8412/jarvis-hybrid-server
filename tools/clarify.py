@@ -35,11 +35,13 @@ def clarify_schedule_update(text: str):
     content = response["choices"][0]["message"]["content"]
 
     try:
-        result = eval(content)  # 파이썬 dict로 응답될 때
+        result = eval(content)  # dict 형식 응답 대응
     except:
-        result = json.loads(content)  # JSON 형식 대응
+        result = json.loads(content)  # JSON 형식 응답 대응
 
+    # ✅ intent는 고정값으로 추가
     return {
+        "intent": "update_schedule",
         "origin_title": result.get("origin_title", ""),
         "origin_date": result.get("origin_date", ""),
         "title": result.get("title", ""),
