@@ -1,22 +1,27 @@
-import requests
+# tools/whisper_send.py
+
 import os
+import requests
+import tempfile
 
-def send_to_whisper(audio_path: str) -> str:
-    api_key = os.getenv("WHISPER_API_KEY")  # 🔹 환경변수에서 키 불러오기
-    if not api_key:
-        raise Exception("WHISPER_API_KEY 환경변수가 설정되어 있지 않습니다.")
+WHISPER_API_KEY = os.getenv("WHISPER_API_KEY")
 
-    if not os.path.exists(audio_path):
-        raise FileNotFoundError(f"File not found: {audio_path}")
+def transcribe(file_obj) -> str:
+    if not WHISPER_API_KEY:
+        raise Exception("Whisper API 키가 설정되지 않았습니다.")
 
-    with open(audio_path, "rb") as audio_file:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+        tmp.write(file_obj.file.read())
+        tmp_path = tmp.name
+
+    with open(tmp_path, "rb") as audio_file:
         response = requests.post(
             "https://api.openai.com/v1/audio/transcriptions",
             headers={
-                "Authorization": f"Bearer {api_key}"
+                "Authorization": f"Bearer {WHISPER_API_KEY}"
             },
             files={
-                "file": (os.path.basename(audio_path), audio_file, "audio/wav")
+                "file": (os.path.basename(tmp_path), audio_file, "audio/wav")
             },
             data={
                 "model": "whisper-1"
@@ -24,6 +29,6 @@ def send_to_whisper(audio_path: str) -> str:
         )
 
     if response.status_code != 200:
-        raise Exception(f"Whisper API error: {response.status_code}, {response.text}")
+        raise Exception(f"Whisper API 오류: {response.status_code}, {response.text}")
 
     return response.json().get("text", "")
