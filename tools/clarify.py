@@ -8,10 +8,14 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 def validate_and_parse(date_str):
     try:
-        # GPT가 ISO 형식으로 주는 경우만 처리
         dt = isoparse(date_str)
-        dt_kst = dt.astimezone(tz.gettz("Asia/Seoul"))
-        return dt_kst.isoformat()
+        # 타임존 없는 경우 → 한국시간으로 명확히 설정
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=tz.gettz("Asia/Seoul"))
+        else:
+            dt = dt.astimezone(tz.gettz("Asia/Seoul"))
+        # +09:00 포함된 ISO 8601 문자열로 반환
+        return dt.isoformat()
     except Exception as e:
         print("❌ 날짜 파싱 오류:", date_str, e)
         return ""
@@ -51,7 +55,7 @@ def clarify_schedule_update(text: str):
     except:
         result = json.loads(content)  # JSON 형식 응답 대응
 
-    # ✅ 불필요한 재파싱 없이, ISO 값만 보정
+    # ✅ ISO 형식으로 KST 보정된 값 반환
     origin_date_kst = validate_and_parse(result.get("origin_date", ""))
     date_kst = validate_and_parse(result.get("date", ""))
 
