@@ -1,21 +1,19 @@
 import openai
 import os
 import json
-from dateutil import parser as dateparser
 from dateutil import tz
+from dateutil.parser import isoparse
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-def parse_to_kst(date_str):
+def validate_and_parse(date_str):
     try:
-        dt = dateparser.parse(date_str)
-        # UTC → KST 보정 (또는 naive한 경우에도 KST 적용)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=tz.UTC)
+        # GPT가 ISO 형식으로 주는 경우만 처리
+        dt = isoparse(date_str)
         dt_kst = dt.astimezone(tz.gettz("Asia/Seoul"))
         return dt_kst.isoformat()
     except Exception as e:
-        print("❌ 날짜 파싱 실패:", date_str, e)
+        print("❌ 날짜 파싱 오류:", date_str, e)
         return ""
 
 def clarify_schedule_update(text: str):
@@ -53,9 +51,9 @@ def clarify_schedule_update(text: str):
     except:
         result = json.loads(content)  # JSON 형식 응답 대응
 
-    # ✅ GPT가 반환한 날짜를 KST 기준으로 보정
-    origin_date_kst = parse_to_kst(result.get("origin_date", ""))
-    date_kst = parse_to_kst(result.get("date", ""))
+    # ✅ 불필요한 재파싱 없이, ISO 값만 보정
+    origin_date_kst = validate_and_parse(result.get("origin_date", ""))
+    date_kst = validate_and_parse(result.get("date", ""))
 
     return {
         "intent": "update_schedule",
