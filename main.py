@@ -7,6 +7,7 @@ import json
 import requests
 from datetime import datetime, timedelta
 from dateutil import tz
+from tools.clarify import clarify_schedule_update  # ✅ 추가
 
 app = FastAPI()
 
@@ -107,7 +108,7 @@ def parse_and_send(text: str):
     )
     if not response.choices:
         return {"error": "GPT 응답이 없습니다."}
-    
+
     content = response.choices[0].message.content
     try:
         result = json.loads(content)
@@ -153,5 +154,17 @@ async def trigger(request: Request):
         if not text:
             return {"error": "text가 비어 있습니다."}
         return parse_and_send(text)
+    except Exception as e:
+        return {"error": str(e), "trace": traceback.format_exc()}
+
+# ✅ clarify 엔드포인트 추가
+@app.post("/clarify")
+async def clarify(request: Request):
+    try:
+        data = await request.json()
+        text = data.get("text", "")
+        if not text:
+            return {"error": "text 필드가 비어 있습니다."}
+        return clarify_schedule_update(text)
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
