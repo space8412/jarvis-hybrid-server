@@ -122,7 +122,9 @@ async def agent(request: Request):
             result["start"] = result["date"]
             result["end"] = (start + timedelta(hours=1)).isoformat()
         webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
-        requests.post(webhook_url, json=result)
+        n8n_response = requests.post(webhook_url, json=result)
+        print("📡 n8n 응답 상태:", n8n_response.status_code)
+        print("📨 n8n 응답 내용:", n8n_response.text)
         return result
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
@@ -157,7 +159,9 @@ async def trigger(request: Request):
             result["start"] = result["date"]
             result["end"] = (start + timedelta(hours=1)).isoformat()
         webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
-        requests.post(webhook_url, json=result)
+        n8n_response = requests.post(webhook_url, json=result)
+        print("📡 n8n 응답 상태:", n8n_response.status_code)
+        print("📨 n8n 응답 내용:", n8n_response.text)
         return result
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
