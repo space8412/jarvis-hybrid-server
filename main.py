@@ -5,7 +5,7 @@ import os
 import traceback
 import json
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from dateutil import tz
 from dateutil.parser import isoparse
 from tools.clarify import clarify_schedule_update
@@ -48,12 +48,26 @@ def classify_category(text):
 def root():
     return {"message": "Jarvis server is running."}
 
+def get_next_week_dates():
+    today = date.today()
+    next_monday = today + timedelta(days=-today.weekday() + 7)
+    weekdays = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
+    return {
+        weekdays[i]: (next_monday + timedelta(days=i)).strftime("%Y-%m-%d")
+        for i in range(7)
+    }
+
 def build_prompt(text: str) -> str:
     today = datetime.now(tz=tz.gettz("Asia/Seoul")).strftime("%Y-%m-%d")
     is_update = "수정" in text or "변경" in text or "바꿔" in text
 
+    weekmap = get_next_week_dates()
+    weekinfo = "\n".join([f"- 다음주 {k}: {v}" for k, v in weekmap.items()])
+
     if is_update:
         return f"""오늘 날짜는 {today}야.
+{weekinfo}
+이 정보를 기준으로 날짜를 정확히 계산해줘.
 다음 명령어는 일정을 수정하려는 요청이야. 아래 항목을 JSON 형식으로 분석해줘:
 
 - intent: 항상 "update_schedule"
@@ -68,6 +82,8 @@ JSON만 출력해줘.
 """
     else:
         return f"""오늘 날짜는 {today}야.
+{weekinfo}
+이 정보를 기준으로 날짜를 정확히 계산해줘.
 다음 명령어를 분석해서 intent, title, date, category를 JSON으로 반환해줘.
 
 💡 아래 조건을 지켜서 분석해줘:
@@ -122,13 +138,21 @@ def parse_and_send(text: str):
         result["origin_date"] = result.get("date", "")
     if "origin_title" not in result or not result["origin_title"]:
         result["origin_title"] = result.get("title", "")
+
     if result.get("date"):
         dt = isoparse(result["date"])
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=tz.gettz("Asia/Seoul"))
+        result["date"] = dt.isoformat()
         start = dt.astimezone(tz.gettz("Asia/Seoul"))
         result["start"] = start.isoformat()
         result["end"] = (start + timedelta(hours=1)).isoformat()
+
+    if result.get("origin_date"):
+        odt = isoparse(result["origin_date"])
+        if odt.tzinfo is None:
+            odt = odt.replace(tzinfo=tz.gettz("Asia/Seoul"))
+        result["origin_date"] = odt.isoformat()
 
     webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
     print("📤 전송 데이터:", json.dumps(result, ensure_ascii=False, indent=2))
