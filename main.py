@@ -177,10 +177,14 @@ async def agent(request: Request):
 async def trigger(request: Request):
     try:
         data = await request.json()
-        message = data.get("message", {})
+        text = ""
 
-        # ✅ 음성 입력을 처리하기 위해 text 추출 우선순위 확장
-        text = message.get("text") or data.get("text")
+        if "message" in data and isinstance(data["message"], dict):
+            text = data["message"].get("text", "")
+
+        if not text:
+            text = data.get("text", "")
+
         if not text:
             return {"error": "text가 비어 있습니다."}
 
