@@ -5,6 +5,7 @@ import os
 import traceback
 import json
 import requests
+import tempfile
 from datetime import datetime, timedelta, date
 from dateutil import tz
 from dateutil.parser import isoparse
@@ -60,7 +61,6 @@ def get_next_week_dates():
 def build_prompt(text: str) -> str:
     today = datetime.now(tz=tz.gettz("Asia/Seoul")).strftime("%Y-%m-%d")
     is_update = "수정" in text or "변경" in text or "바꿔" in text
-
     weekmap = get_next_week_dates()
     weekinfo = "\n".join([f"- 다음주 {k}: {v}" for k, v in weekmap.items()])
 
@@ -69,14 +69,12 @@ def build_prompt(text: str) -> str:
 {weekinfo}
 이 정보를 기준으로 날짜를 정확히 계산해줘.
 다음 명령어는 일정을 수정하려는 요청이야. 아래 항목을 JSON 형식으로 분석해줘:
-
 - intent: 항상 "update_schedule"
 - origin_title: 수정 전 일정 제목
 - origin_date: 수정 전 일정 시간 (ISO 8601)
 - title: 새로운 일정 제목 (같으면 그대로)
 - date: 새로운 일정 시간 (ISO 8601)
 - category: 회의, 상담, 현장방문 등으로 분류
-
 지금 명령어: {text}
 JSON만 출력해줘.
 """
@@ -85,7 +83,6 @@ JSON만 출력해줘.
 {weekinfo}
 이 정보를 기준으로 날짜를 정확히 계산해줘.
 다음 명령어를 분석해서 intent, title, date, category를 JSON으로 반환해줘.
-
 💡 아래 조건을 지켜서 분석해줘:
 - intent는 register_schedule, delete_schedule, update_schedule 중 하나로 지정해줘.
 - title은 장소나 일정의 키워드를 사용해줘. (예: '성수동', '사무실')
@@ -94,7 +91,6 @@ JSON만 출력해줘.
 - 사용자가 시간 없이 날짜만 말한 경우, 해당 날짜를 종일 일정으로 처리해줘.
 - "오늘", "내일" 같은 표현은 오늘 날짜 {today} 기준으로 계산해줘.
 - **과거 날짜라도 그대로 사용해줘. 현재 날짜를 기준으로 미래로 바꾸지 마.**
-
 지금 명령어: {text}
 """
 
@@ -125,20 +121,17 @@ def parse_and_send(text: str):
     )
     if not response.choices:
         return {"error": "GPT 응답이 없습니다."}
-
     content = response.choices[0].message.content
     try:
         result = json.loads(content)
     except json.JSONDecodeError:
         return {"error": "GPT 응답이 JSON 형식이 아닙니다.", "raw": content}
-
     result = apply_time_correction(text, result)
     result["category"] = classify_category(text)
     if "origin_date" not in result or not result["origin_date"]:
         result["origin_date"] = result.get("date", "")
     if "origin_title" not in result or not result["origin_title"]:
         result["origin_title"] = result.get("title", "")
-
     if result.get("date"):
         dt = isoparse(result["date"])
         if dt.tzinfo is None:
@@ -147,13 +140,11 @@ def parse_and_send(text: str):
         start = dt.astimezone(tz.gettz("Asia/Seoul"))
         result["start"] = start.isoformat()
         result["end"] = (start + timedelta(hours=1)).isoformat()
-
     if result.get("origin_date"):
         odt = isoparse(result["origin_date"])
         if odt.tzinfo is None:
             odt = odt.replace(tzinfo=tz.gettz("Asia/Seoul"))
         result["origin_date"] = odt.isoformat()
-
     webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
     print("📤 전송 데이터:", json.dumps(result, ensure_ascii=False, indent=2))
     print("🔗 전송 대상 URL:", webhook_url)
@@ -177,17 +168,30 @@ async def agent(request: Request):
 async def trigger(request: Request):
     try:
         data = await request.json()
+        message = data.get("message", {})
         text = ""
-
-        if "message" in data and isinstance(data["message"], dict):
-            text = data["message"].get("text", "")
-
+        if "voice" in message:
+            file_id = message["voice"]["file_id"]
+            file_info = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getFile?file_id={file_id}").json()
+            file_path = file_info["result"]["file_path"]
+            file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
+            response = requests.get(file_url)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".ogg") as tmp_file:
+                tmp_file.write(response.content)
+                tmp_path = tmp_file.name
+            with open(tmp_path, "rb") as audio_file:
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    response_format="text"
+                )
+            text = transcript.strip()
+        else:
+            text = message.get("text", "")
         if not text:
             text = data.get("text", "")
-
         if not text:
             return {"error": "text가 비어 있습니다."}
-
         return parse_and_send(text)
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
