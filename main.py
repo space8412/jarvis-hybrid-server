@@ -7,7 +7,8 @@ import json
 import requests
 from datetime import datetime, timedelta
 from dateutil import tz
-from tools.clarify import clarify_schedule_update  # ✅ 추가
+from dateutil.parser import isoparse
+from tools.clarify import clarify_schedule_update
 
 app = FastAPI()
 
@@ -122,8 +123,8 @@ def parse_and_send(text: str):
     if "origin_title" not in result or not result["origin_title"]:
         result["origin_title"] = result.get("title", "")
     if result.get("date"):
-        start = datetime.fromisoformat(result["date"])
-        result["start"] = result["date"]
+        start = isoparse(result["date"]).astimezone(tz.gettz("Asia/Seoul"))
+        result["start"] = start.isoformat()
         result["end"] = (start + timedelta(hours=1)).isoformat()
 
     webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
@@ -157,7 +158,6 @@ async def trigger(request: Request):
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
 
-# ✅ clarify 엔드포인트 추가
 @app.post("/clarify")
 async def clarify(request: Request):
     try:
