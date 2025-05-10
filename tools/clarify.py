@@ -1,8 +1,22 @@
 import openai
 import os
 import json
+from dateutil import parser as dateparser
+from dateutil import tz
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
+
+def parse_to_kst(date_str):
+    try:
+        dt = dateparser.parse(date_str)
+        # UTC → KST 보정 (또는 naive한 경우에도 KST 적용)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=tz.UTC)
+        dt_kst = dt.astimezone(tz.gettz("Asia/Seoul"))
+        return dt_kst.isoformat()
+    except Exception as e:
+        print("❌ 날짜 파싱 실패:", date_str, e)
+        return ""
 
 def clarify_schedule_update(text: str):
     system_prompt = """너는 일정 관리 비서야. 사용자의 명령에서 다음 정보를 추출해:
@@ -39,11 +53,14 @@ def clarify_schedule_update(text: str):
     except:
         result = json.loads(content)  # JSON 형식 응답 대응
 
-    # ✅ intent는 고정값으로 추가
+    # ✅ GPT가 반환한 날짜를 KST 기준으로 보정
+    origin_date_kst = parse_to_kst(result.get("origin_date", ""))
+    date_kst = parse_to_kst(result.get("date", ""))
+
     return {
         "intent": "update_schedule",
         "origin_title": result.get("origin_title", ""),
-        "origin_date": result.get("origin_date", ""),
+        "origin_date": origin_date_kst,
         "title": result.get("title", ""),
-        "date": result.get("date", "")
+        "date": date_kst
     }
