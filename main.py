@@ -1,6 +1,5 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
 import os
 import traceback
@@ -19,12 +18,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ✅ 정적 파일 서빙 (조건부로 apk 폴더 mount)
-if os.path.isdir("apk"):
-    app.mount("/apk", StaticFiles(directory="apk"), name="apk")
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# ✅ 환경변수 체크
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+if not OPENAI_API_KEY:
+    raise RuntimeError("❌ OPENAI_API_KEY 환경변수가 설정되지 않았습니다.")
+if not TELEGRAM_TOKEN:
+    raise RuntimeError("❌ TELEGRAM_TOKEN 환경변수가 설정되지 않았습니다.")
+
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 def classify_category(text):
     category_keywords = {
@@ -92,6 +94,44 @@ def apply_time_correction(text, result):
         pass
     return result
 
+def parse_and_send(text: str):
+    prompt = build_prompt(text)
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "너는 한국어 명령어를 구조화하는 비서야."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.2
+    )
+    if not response.choices:
+        return {"error": "GPT 응답이 없습니다."}
+    
+    content = response.choices[0].message.content
+    try:
+        result = json.loads(content)
+    except json.JSONDecodeError:
+        return {"error": "GPT 응답이 JSON 형식이 아닙니다.", "raw": content}
+
+    result = apply_time_correction(text, result)
+    result["category"] = classify_category(text)
+    if "origin_date" not in result or not result["origin_date"]:
+        result["origin_date"] = result.get("date", "")
+    if "origin_title" not in result or not result["origin_title"]:
+        result["origin_title"] = result.get("title", "")
+    if result.get("date"):
+        start = datetime.fromisoformat(result["date"])
+        result["start"] = result["date"]
+        result["end"] = (start + timedelta(hours=1)).isoformat()
+
+    webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
+    print("📤 전송 데이터:", json.dumps(result, ensure_ascii=False, indent=2))
+    print("🔗 전송 대상 URL:", webhook_url)
+    n8n_response = requests.post(webhook_url, json=result)
+    print("📡 n8n 응답 상태:", n8n_response.status_code)
+    print("📨 n8n 응답 내용:", n8n_response.text)
+    return result
+
 @app.post("/agent")
 async def agent(request: Request):
     try:
@@ -99,33 +139,7 @@ async def agent(request: Request):
         text = data.get("text", "")
         if not text:
             return {"error": "text 필드가 비어있습니다."}
-
-        prompt = build_prompt(text)
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "너는 한국어 명령어를 구조화하는 비서야."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2
-        )
-        content = response.choices[0].message.content
-        result = json.loads(content)
-        result = apply_time_correction(text, result)
-        result["category"] = classify_category(text)
-        if "origin_date" not in result or not result["origin_date"]:
-            result["origin_date"] = result.get("date", "")
-        if "origin_title" not in result or not result["origin_title"]:
-            result["origin_title"] = result.get("title", "")
-        if result.get("date"):
-            start = datetime.fromisoformat(result["date"])
-            result["start"] = result["date"]
-            result["end"] = (start + timedelta(hours=1)).isoformat()
-        webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
-        n8n_response = requests.post(webhook_url, json=result)
-        print("📡 n8n 응답 상태:", n8n_response.status_code)
-        print("📨 n8n 응답 내용:", n8n_response.text)
-        return result
+        return parse_and_send(text)
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
 
@@ -137,31 +151,6 @@ async def trigger(request: Request):
         text = message.get("text", "")
         if not text:
             return {"error": "text가 비어 있습니다."}
-        prompt = build_prompt(text)
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "너는 한국어 명령어를 구조화하는 비서야."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2
-        )
-        content = response.choices[0].message.content
-        result = json.loads(content)
-        result = apply_time_correction(text, result)
-        result["category"] = classify_category(text)
-        if "origin_date" not in result or not result["origin_date"]:
-            result["origin_date"] = result.get("date", "")
-        if "origin_title" not in result or not result["origin_title"]:
-            result["origin_title"] = result.get("title", "")
-        if result.get("date"):
-            start = datetime.fromisoformat(result["date"])
-            result["start"] = result["date"]
-            result["end"] = (start + timedelta(hours=1)).isoformat()
-        webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
-        n8n_response = requests.post(webhook_url, json=result)
-        print("📡 n8n 응답 상태:", n8n_response.status_code)
-        print("📨 n8n 응답 내용:", n8n_response.text)
-        return result
+        return parse_and_send(text)
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
