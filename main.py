@@ -123,7 +123,10 @@ def parse_and_send(text: str):
     if "origin_title" not in result or not result["origin_title"]:
         result["origin_title"] = result.get("title", "")
     if result.get("date"):
-        start = isoparse(result["date"]).astimezone(tz.gettz("Asia/Seoul"))
+        dt = isoparse(result["date"])
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=tz.gettz("Asia/Seoul"))
+        start = dt.astimezone(tz.gettz("Asia/Seoul"))
         result["start"] = start.isoformat()
         result["end"] = (start + timedelta(hours=1)).isoformat()
 
