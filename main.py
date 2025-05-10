@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, UploadFile, File
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
@@ -6,10 +6,8 @@ import os
 import traceback
 import json
 import requests
-import tempfile
 from datetime import datetime, timedelta
 from dateutil import tz
-from tools import whisper_send as whisper  # ✅ whisper 모듈 임포트
 
 app = FastAPI()
 
@@ -45,14 +43,6 @@ def classify_category(text):
 @app.get("/")
 def root():
     return {"message": "Jarvis server is running."}
-
-@app.post("/voice")
-async def transcribe_voice(file: UploadFile = File(...)):
-    try:
-        result = whisper.transcribe(file)  # ✅ await 제거
-        return {"status": "success", "text": result}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
 
 def build_prompt(text: str) -> str:
     today = datetime.now(tz=tz.gettz("Asia/Seoul")).strftime("%Y-%m-%d")
@@ -132,7 +122,7 @@ async def agent(request: Request):
             result["start"] = result["date"]
             result["end"] = (start + timedelta(hours=1)).isoformat()
         webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
-        n8n_response = requests.post(webhook_url, json=result)
+        requests.post(webhook_url, json=result)
         return result
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
@@ -142,25 +132,7 @@ async def trigger(request: Request):
     try:
         data = await request.json()
         message = data.get("message", {})
-        text = ""
-        if "voice" in message:
-            file_id = message["voice"]["file_id"]
-            file_info = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getFile?file_id={file_id}").json()
-            file_path = file_info["result"]["file_path"]
-            file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
-            response = requests.get(file_url)
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".ogg") as tmp_file:
-                tmp_file.write(response.content)
-                tmp_path = tmp_file.name
-            with open(tmp_path, "rb") as audio_file:
-                transcript = client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    response_format="text"
-                )
-            text = transcript.strip()
-        else:
-            text = message.get("text", "")
+        text = message.get("text", "")
         if not text:
             return {"error": "text가 비어 있습니다."}
         prompt = build_prompt(text)
@@ -185,7 +157,7 @@ async def trigger(request: Request):
             result["start"] = result["date"]
             result["end"] = (start + timedelta(hours=1)).isoformat()
         webhook_url = "https://n8n-server-lvqr.onrender.com/webhook/telegram-webhook"
-        n8n_response = requests.post(webhook_url, json=result)
+        requests.post(webhook_url, json=result)
         return result
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
