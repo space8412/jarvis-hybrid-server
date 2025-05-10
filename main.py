@@ -178,9 +178,12 @@ async def trigger(request: Request):
     try:
         data = await request.json()
         message = data.get("message", {})
-        text = message.get("text", "")
+
+        # ✅ 음성 입력을 처리하기 위해 text 추출 우선순위 확장
+        text = message.get("text") or data.get("text")
         if not text:
             return {"error": "text가 비어 있습니다."}
+
         return parse_and_send(text)
     except Exception as e:
         return {"error": str(e), "trace": traceback.format_exc()}
