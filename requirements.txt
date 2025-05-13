@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-openai
-python-dateutil
-requests
-python-dotenv
-dateparser
-python-multipart
