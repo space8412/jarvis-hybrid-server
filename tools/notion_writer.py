@@ -14,10 +14,14 @@ headers = {
 
 # ✅ Notion에 일정 등록
 def save_to_notion(data: dict) -> dict:
+    print("✅ save_to_notion 호출됨")
+    print(f"📦 받은 데이터: {data}")
+    print(f"🧩 DATABASE_ID: {repr(DATABASE_ID)}")
+
     notion_payload = {
         "parent": {"database_id": DATABASE_ID},
         "properties": {
-            "일정 제목": {  # ← 실제 Notion 필드명에 맞게 수정됨
+            "일정 제목": {
                 "title": [{"text": {"content": data.get("title", "무제")}}]
             },
             "날짜": {
@@ -30,9 +34,14 @@ def save_to_notion(data: dict) -> dict:
     }
 
     response = requests.post("https://api.notion.com/v1/pages", headers=headers, json=notion_payload)
+
     if response.status_code != 200:
+        print("❌ Notion 등록 실패")
+        print("📥 요청 내용:", notion_payload)
+        print("📤 응답 내용:", response.text)
         raise Exception(f"Notion API 오류: {response.text}")
 
+    print("✅ Notion 등록 성공")
     return {"status": "saved", "notion_url": response.json().get("url")}
 
 
@@ -46,6 +55,7 @@ def search_notion_page(title: str, date: str) -> str:
             ]
         }
     }
+
     response = requests.post(
         f"https://api.notion.com/v1/databases/{DATABASE_ID}/query",
         headers=headers,
