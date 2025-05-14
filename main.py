@@ -3,6 +3,7 @@ from tools.telegram_parser import extract_text_from_telegram
 from tools.gpt_parser import parse_command
 from tools.calendar import correct_datetime_format
 from tools.classifier import classify_category
+from tools.clarify import clarify_intent
 from tools.notion_writer import save_to_notion, delete_from_notion, update_notion_page
 
 app = FastAPI()
@@ -22,6 +23,7 @@ async def trigger(request: Request):
 
         # 🧠 명령어 파싱
         parsed = parse_command(text)
+        parsed = clarify_intent(parsed)  # ← intent 분기 확정 추가
         print("🧠 파싱 결과:", parsed)
 
         # ⏰ 시간 포맷 보정
