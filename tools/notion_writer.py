@@ -1,23 +1,23 @@
 import os
 import requests
 
-# ✅ Notion API Key 및 Database ID 환경변수 불러오기
+# ✅ 환경변수 불러오기 및 정리 (따옴표 제거 포함)
 NOTION_TOKEN = os.getenv("NOTION_API_KEY")
-DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
+DATABASE_ID = os.getenv("NOTION_DATABASE_ID").strip('"')
 
-# ✅ 공통 요청 헤더 설정
+# ✅ 공통 헤더
 headers = {
     "Authorization": f"Bearer {NOTION_TOKEN}",
     "Content-Type": "application/json",
     "Notion-Version": "2022-06-28"
 }
 
+# ✅ Notion에 일정 등록
 def save_to_notion(data: dict) -> dict:
-    """일정 데이터를 Notion DB에 새 페이지로 저장"""
     notion_payload = {
         "parent": {"database_id": DATABASE_ID},
         "properties": {
-            "제목": {
+            "일정 제목": {  # ← 실제 Notion 필드명에 맞게 수정됨
                 "title": [{"text": {"content": data.get("title", "무제")}}]
             },
             "날짜": {
@@ -35,12 +35,13 @@ def save_to_notion(data: dict) -> dict:
 
     return {"status": "saved", "notion_url": response.json().get("url")}
 
+
+# ✅ 기존 일정 검색 (제목+날짜)
 def search_notion_page(title: str, date: str) -> str:
-    """제목과 날짜 기준으로 기존 페이지 ID를 검색"""
     query = {
         "filter": {
             "and": [
-                {"property": "제목", "rich_text": {"contains": title}},
+                {"property": "일정 제목", "rich_text": {"contains": title}},
                 {"property": "날짜", "date": {"equals": date}}
             ]
         }
@@ -55,8 +56,9 @@ def search_notion_page(title: str, date: str) -> str:
         return results[0]["id"]
     return None
 
+
+# ✅ 일정 삭제 (archive 처리)
 def delete_from_notion(data: dict) -> dict:
-    """기존 일정을 찾아 Notion에서 삭제 (archive 처리)"""
     page_id = search_notion_page(data.get("title", ""), data.get("date", ""))
     if not page_id:
         return {"status": "not_found"}
@@ -71,15 +73,16 @@ def delete_from_notion(data: dict) -> dict:
 
     return {"status": "deleted", "page_id": page_id}
 
+
+# ✅ 일정 수정 (기존 제목+날짜 기준으로 찾아서 업데이트)
 def update_notion_page(data: dict) -> dict:
-    """기존 일정을 찾아 제목/날짜/카테고리를 수정"""
     page_id = search_notion_page(data.get("origin_title", ""), data.get("origin_date", ""))
     if not page_id:
         return {"status": "not_found"}
 
     payload = {
         "properties": {
-            "제목": {
+            "일정 제목": {
                 "title": [{"text": {"content": data.get("title", "무제")}}]
             },
             "날짜": {
