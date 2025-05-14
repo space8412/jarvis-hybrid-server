@@ -1,102 +1,67 @@
-from notion_client import Client
-from config import NOTION_API_KEY, NOTION_DATABASE_ID
-from utils import get_logger
+import requests
+import os
+import logging
 
-logger = get_logger(__name__)
+logger = logging.getLogger("tools.verify_database")
+
+NOTION_API_URL = "https://api.notion.com/v1/databases/"
+NOTION_API_VERSION = "2022-06-28"
+NOTION_TOKEN = os.getenv("NOTION_API_KEY")
+DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
+
+
+def get_notion_headers():
+    return {
+        "Authorization": f"Bearer {NOTION_TOKEN}",
+        "Notion-Version": NOTION_API_VERSION,
+        "Content-Type": "application/json"
+    }
+
 
 class DatabaseVerifier:
-    def __init__(self):
-        self.client = Client(auth=NOTION_API_KEY)
-        self.database_id = NOTION_DATABASE_ID
-        self.required_properties = {
-            "Name": "title",
-            "Tags": "multi_select",
-            "Status": "select",
-            "Priority": "select",
-            "Due Date": "date"
-        }
-
-    def verify_database(self) -> bool:
-        """Verify that the Notion database has all required properties"""
+    def verify_and_fix_database(self):
         try:
-            # Get database structure
-            database = self.client.databases.retrieve(database_id=self.database_id)
-            properties = database.get("properties", {})
+            logger.info("Verifying Notion database structure...")
+            url = f"{NOTION_API_URL}{DATABASE_ID}"
+            headers = get_notion_headers()
+            response = requests.get(url, headers=headers)
 
-            # Check for required properties
-            missing_properties = []
-            for prop_name, prop_type in self.required_properties.items():
-                if prop_name not in properties:
-                    missing_properties.append(prop_name)
-                elif properties[prop_name]["type"] != prop_type:
-                    logger.warning(f"Property '{prop_name}' has wrong type. Expected: {prop_type}, Got: {properties[prop_name]['type']}")
-
-            if missing_properties:
-                logger.error(f"Missing required properties: {', '.join(missing_properties)}")
+            if response.status_code != 200:
+                logger.error(f"Error verifying database: {response.text}")
                 return False
 
-            logger.info("Database verification successful")
+            data = response.json()
+            properties = data.get("properties", {})
+
+            required_properties = {
+                "Name": {"type": "title", "title": {}},
+                "Tags": {"type": "multi_select", "multi_select": {}},
+                "Status": {"type": "select", "select": {}},
+                "Priority": {"type": "select", "select": {}},
+                "Due Date": {"type": "date", "date": {}},
+            }
+
+            for name, schema in required_properties.items():
+                if schema["type"] == "title":
+                    title_exists = any(prop.get("type") == "title" for prop in properties.values())
+                    if title_exists:
+                        logger.info("Title property already exists. Skipping creation.")
+                        continue
+
+                if name not in properties:
+                    logger.info(f"Creating missing property: {name}")
+                    patch_response = requests.patch(
+                        url,
+                        headers=headers,
+                        json={"properties": {name: schema}}
+                    )
+
+                    if patch_response.status_code != 200:
+                        logger.error(f"Failed to create property '{name}': {patch_response.text}")
+
+            logger.info("Database verification complete.")
             return True
 
         except Exception as e:
-            logger.error(f"Error verifying database: {str(e)}")
+            logger.error(f"Exception during database verification: {e}")
             return False
-
-    def create_missing_properties(self) -> bool:
-        """Create missing properties in the Notion database"""
-        try:
-            # Get current database structure
-            database = self.client.databases.retrieve(database_id=self.database_id)
-            properties = database.get("properties", {})
-
-            # Prepare properties to add
-            properties_to_add = {}
-            for prop_name, prop_type in self.required_properties.items():
-                if prop_name not in properties:
-                    if prop_type == "title":
-                        properties_to_add[prop_name] = {
-                            "title": {}
-                        }
-                    elif prop_type == "multi_select":
-                        properties_to_add[prop_name] = {
-                            "multi_select": {
-                                "options": []
-                            }
-                        }
-                    elif prop_type == "select":
-                        properties_to_add[prop_name] = {
-                            "select": {
-                                "options": []
-                            }
-                        }
-                    elif prop_type == "date":
-                        properties_to_add[prop_name] = {
-                            "date": {}
-                        }
-
-            if properties_to_add:
-                # Update database with new properties
-                self.client.databases.update(
-                    database_id=self.database_id,
-                    properties=properties_to_add
-                )
-                logger.info(f"Added missing properties: {', '.join(properties_to_add.keys())}")
-                return True
-
-            return False
-
-        except Exception as e:
-            logger.error(f"Error creating missing properties: {str(e)}")
-            return False
-
-    def verify_and_fix_database(self) -> bool:
-        """Verify database structure and create missing properties if needed"""
-        try:
-            if not self.verify_database():
-                logger.info("Attempting to create missing properties...")
-                return self.create_missing_properties()
-            return True
-
-        except Exception as e:
-            logger.error(f"Error in verify_and_fix_database: {str(e)}")
-            return False 
