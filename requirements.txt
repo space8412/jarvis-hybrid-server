@@ -1,7 +1,0 @@
-fastapi
-uvicorn
-openai
-requests
-aiohttp
-python-dateutil
-python-dotenv
