@@ -2,6 +2,7 @@ import os
 import json
 import logging
 from datetime import datetime
+from dateutil import parser
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
@@ -25,27 +26,34 @@ calendar_service = build("calendar", "v3", credentials=creds)
 def register_schedule(title: str, start_date: str, category: str):
     """
     제목, 날짜, 카테고리를 받아 구글 캘린더에 일정을 등록하고 Notion에 기록합니다.
-    
     :param title: 일정 제목
-    :param start_date: 시작 날짜 (YYYY-MM-DD 또는 YYYY-MM-DDTHH:MM:SS 형식)
-    :param category: 일정 카테고리 (예: 회의, 콘텐츠, 개인 등)
+    :param start_date: 시작 날짜 (예: "5월 18일 오후 2시")
+    :param category: 일정 카테고리
     """
     try:
-        # ✅ 시간 포함 여부 확인
-        is_all_day = "T" not in start_date
-        calendar_start = {}
-        calendar_end = {}
+        # ✅ 날짜 문자열 파싱 → datetime 객체
+        try:
+            parsed_dt = parser.parse(start_date, fuzzy=True)
+        except Exception as e:
+            logger.error(f"❌ 날짜 파싱 실패: {start_date} - {e}")
+            raise ValueError(f"날짜 형식이 잘못되었습니다: {start_date}")
 
+        # ✅ 시간 포함 여부 판단
+        is_all_day = parsed_dt.hour == 0 and parsed_dt.minute == 0
+
+        # ✅ ISO 형식 구성
         if is_all_day:
-            # 종일 일정 (date만 사용)
-            calendar_start["date"] = start_date
-            calendar_end["date"] = start_date
+            calendar_start = {"date": parsed_dt.strftime("%Y-%m-%d")}
+            calendar_end = {"date": parsed_dt.strftime("%Y-%m-%d")}
         else:
-            # 시간 포함 일정 (dateTime 사용)
-            calendar_start["dateTime"] = start_date
-            calendar_start["timeZone"] = "Asia/Seoul"
-            calendar_end["dateTime"] = start_date
-            calendar_end["timeZone"] = "Asia/Seoul"
+            calendar_start = {
+                "dateTime": parsed_dt.isoformat(),
+                "timeZone": "Asia/Seoul"
+            }
+            calendar_end = {
+                "dateTime": parsed_dt.isoformat(),
+                "timeZone": "Asia/Seoul"
+            }
 
         # ✅ 이벤트 객체 구성
         event = {
@@ -54,7 +62,6 @@ def register_schedule(title: str, start_date: str, category: str):
             "end": calendar_end,
         }
 
-        # ✅ 시간 포함 일정에만 알림 설정
         if not is_all_day:
             event["reminders"] = {
                 "useDefault": False,
@@ -73,7 +80,7 @@ def register_schedule(title: str, start_date: str, category: str):
         logger.info(f"✅ Google Calendar 일정 등록 완료 (ID: {event['id']})")
 
         # ✅ Notion에도 동일 일정 기록
-        notion_date = start_date.split("T")[0]  # 시간 포함 일정에서도 YYYY-MM-DD 추출
+        notion_date = parsed_dt.strftime("%Y-%m-%d")
         create_notion_page(title, notion_date, category)
 
     except Exception as e:
