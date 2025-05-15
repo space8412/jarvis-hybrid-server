@@ -33,12 +33,13 @@ app = FastAPI()
 async def trigger(request: Request):
     try:
         body = await request.json()
-        message = body.get("message", "")
+        msg_obj = body.get("message", {})
+        message_text = msg_obj.get("text", "")
 
-        logger.info(f"[trigger] 수신된 메시지: {message}")
+        logger.info(f"[trigger] 수신된 메시지: {message_text}")
 
         # ⬇️ 명령 파싱
-        parsed = clarify_command(message)
+        parsed = clarify_command(message_text)
         logger.debug(f"[trigger] clarify 결과: {parsed}")
 
         intent = parsed.get("intent", "")
@@ -90,8 +91,8 @@ async def trigger(request: Request):
 async def clarify_test(request: Request):
     try:
         body = await request.json()
-        message = body.get("message", "")
-        parsed = clarify_command(message)
+        message_text = body.get("message", "")
+        parsed = clarify_command(message_text)
         return parsed
 
     except Exception as e:
