@@ -10,6 +10,8 @@ from tools.calendar_register import register_schedule
 from tools.calendar_delete import delete_schedule
 from tools.verify_database import verify_environment
 from tools.notion_writer import create_notion_page  # ✅ Notion 연동 추가
+import redis
+from redis.exceptions import RedisError
 
 # 로깅 설정
 logging.basicConfig(
@@ -27,6 +29,24 @@ load_dotenv()
 if not verify_environment():
     logger.error("❌ 필수 환경변수가 누락되었습니다. 서버를 종료합니다.")
     exit(1)
+
+# Redis 초기화
+redis_client = None
+
+def init_redis():
+    global redis_client
+    try:
+        redis_url = os.getenv("REDIS_URL")
+        if not redis_url:
+            logger.error("REDIS_URL이 설정되지 않았습니다.")
+            return False
+        redis_client = redis.Redis.from_url(redis_url)
+        redis_client.ping()
+        logger.info("✅ Redis 연결 성공")
+        return True
+    except RedisError as e:
+        logger.error(f"Redis 연결 실패: {str(e)}")
+        return False
 
 # FastAPI 앱 및 Telegram 앱 초기화
 app = FastAPI()
@@ -74,7 +94,7 @@ async def handle_telegram_update(request: Request):
         data = await request.json()
         update = telegram_app.parse_update(data)
 
-        if update.message:
+        if update.message and update.message.text:
             message_text = update.message.text
             title, start_date, category, intent = clarify_command(message_text)
 
@@ -91,5 +111,8 @@ def read_root():
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("🚀 Jarvis Automation Server 시작")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    if init_redis():
+        logger.info("🚀 Jarvis Automation Server 시작")
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+    else:
+        logger.error("❌ Redis 초기화 실패로 서버가 시작되지 않았습니다.")
