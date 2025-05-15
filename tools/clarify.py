@@ -1,8 +1,6 @@
 import re
 from typing import Dict, Optional
-from datetime import datetime, timedelta
 import logging
-from dateutil import parser
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +12,8 @@ CATEGORY_KEYWORDS = ["회의", "미팅", "약속", "상담", "콘텐츠", "개�
 
 # 날짜 표현 정규식
 DATE_PATTERNS = [
-    r"\d{1,2}월\s*\d{1,2}일\s*(오전|오후)?\s*\d{1,2}시",  # 예: 5월 18일 오후 2시
-    r"\d{1,2}월\s*\d{1,2}일",                        # 예: 5월 18일
+    r"\d{1,2}월\s*\d{1,2}일\s*(오전|오후)?\s*\d{1,2}시",
+    r"\d{1,2}월\s*\d{1,2}일",
     r"오늘", r"내일", r"모레", r"다음주\s*[월화수목금토일]요일"
 ]
 
@@ -54,25 +52,22 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
                 break
 
         # 날짜 추출
-        date_matches = re.findall("|".join(DATE_PATTERNS), message)
-        full_date_match = re.search(r"\d{1,2}월\s*\d{1,2}일\s*(오전|오후)?\s*\d{1,2}시", message)
-
-        if result["intent"] == "update_schedule" and len(date_matches) >= 2:
-            result["origin_date"] = date_matches[0].strip()
-            result["start_date"] = date_matches[1].strip()
-        elif date_matches:
-            result["start_date"] = date_matches[0].strip()
-
+        date_regex = "|".join(DATE_PATTERNS)
+        full_date_match = re.search(date_regex, message)
         if full_date_match:
             result["start_date"] = full_date_match.group(0).strip()
 
-        # 제목 추출
-        parts = re.split("|".join(DATE_PATTERNS), message)
-        if result["intent"] == "update_schedule" and len(parts) >= 3:
-            result["origin_title"] = parts[0].strip()
-            result["title"] = parts[2].strip()
-        elif len(parts) >= 2:
-            result["title"] = parts[0].strip()
+        # title 추출 (날짜 이후 나오는 문장)
+        if full_date_match:
+            end = full_date_match.end()
+            remaining = message[end:]
+            result["title"] = (
+                remaining.replace("등록해줘", "")
+                         .replace("추가해줘", "")
+                         .replace("기록해줘", "")
+                         .replace("예정", "")
+                         .strip()
+            )
 
         logger.debug(f"[clarify] 파싱 결과: {result}")
         return result
