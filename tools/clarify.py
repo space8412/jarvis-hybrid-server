@@ -1,5 +1,5 @@
 import re
-from typing import Tuple
+from typing import Tuple, Optional
 from datetime import datetime, timedelta
 import logging
 from dateutil import parser
@@ -8,40 +8,42 @@ import jamo
 
 logger = logging.getLogger(__name__)
 
-def parse_korean_date(date_str: str) -> datetime:
+def parse_korean_date(date_str: str) -> Optional[datetime]:
     """
     한국어 날짜 표현을 datetime 객체로 변환합니다.
     
     :param date_str: 한국어 날짜 문자열 (예: "내일 오후 3시", "다음주 월요일")
-    :return: datetime 객체
+    :return: datetime 객체 또는 None
     """
     now = datetime.now()
-    
-    # 상대적 날짜 처리
-    if "내일" in date_str:
-        date = now + timedelta(days=1)
-    elif "모레" in date_str:
-        date = now + timedelta(days=2)
-    elif "다음주" in date_str:
-        date = now + timedelta(days=7)
-    else:
-        # 절대적 날짜 처리 (예: "5월 20일")
-        try:
+
+    try:
+        # 상대적 날짜 처리
+        if "오늘" in date_str:
+            date = now
+        elif "내일" in date_str:
+            date = now + timedelta(days=1)
+        elif "모레" in date_str:
+            date = now + timedelta(days=2)
+        elif "다음주" in date_str:
+            date = now + timedelta(days=7)
+        else:
+            # 절대적 날짜 처리 (예: "5월 20일")
             date = parser.parse(date_str, fuzzy=True)
-        except:
-            logger.error(f"날짜 파싱 실패: {date_str}")
-            return now
-    
-    # 시간 처리
-    if "오전" in date_str or "오후" in date_str:
-        time_match = re.search(r"(\d{1,2})시", date_str)
-        if time_match:
-            hour = int(time_match.group(1))
-            if "오후" in date_str and hour < 12:
-                hour += 12
-            date = date.replace(hour=hour, minute=0)
-    
-    return date
+
+        # 시간 처리
+        if "오전" in date_str or "오후" in date_str:
+            time_match = re.search(r"(\\d{1,2})시", date_str)
+            if time_match:
+                hour = int(time_match.group(1))
+                if "오후" in date_str and hour < 12:
+                    hour += 12
+                date = date.replace(hour=hour, minute=0)
+
+        return date
+    except Exception as e:
+        logger.error(f"날짜 파싱 실패: {date_str} - {str(e)}")
+        return None
 
 def clarify_command(message: str) -> Tuple[str, str, str, str]:
     """
@@ -63,6 +65,7 @@ def clarify_command(message: str) -> Tuple[str, str, str, str]:
             # 제목 추출 (날짜 이전의 모든 텍스트)
             date_patterns = [
                 r"\d{1,2}월\s*\d{1,2}일",
+                r"오늘",
                 r"내일",
                 r"모레",
                 r"다음주\s*[월화수목금토일]요일"
