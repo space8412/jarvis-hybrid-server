@@ -39,7 +39,10 @@ def verify_environment() -> bool:
     required_vars = [
         "NOTION_TOKEN",
         "NOTION_DATABASE_ID",
-        "TELEGRAM_BOT_TOKEN"
+        "TELEGRAM_BOT_TOKEN",
+        "OPENAI_API_KEY",
+        "REDIS_URL",
+        "GOOGLE_CALENDAR_CREDENTIALS"  # token.json 대신 환경변수로 관리
     ]
     
     missing_vars = []
