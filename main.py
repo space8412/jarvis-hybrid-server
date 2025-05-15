@@ -6,90 +6,89 @@ from dotenv import load_dotenv
 
 from tools.telegram_parser import setup_telegram_app
 from tools.clarify import clarify_command
-from tools.calendar_register import register_schedule
-from tools.calendar_delete import delete_schedule
-from tools.verify_database import verify_environment
-from tools.notion_writer import create_notion_page  # ✅ Notion 연동 추가
+from tools.calendar_register import register_to_calendar
+from tools.notion_writer import save_to_notion
 
-# 로깅 설정
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('jarvis.log')
-    ]
-)
+# ✅ .env 환경변수 로드
+load_dotenv()
+
+# ✅ 로그 레벨 설정 (기본값 INFO)
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=getattr(logging, log_level))
 logger = logging.getLogger(__name__)
 
-# 환경변수 로드 및 검증
-load_dotenv()
-if not verify_environment():
-    logger.error("❌ 필수 환경변수가 누락되었습니다. 서버를 종료합니다.")
-    exit(1)
+# ✅ 필수 환경변수 확인
+REQUIRED_ENV_VARS = ["OPENAI_API_KEY", "NOTION_TOKEN", "NOTION_DATABASE_ID"]
+for var in REQUIRED_ENV_VARS:
+    if not os.getenv(var):
+        raise RuntimeError(f"❌ 환경변수 {var}가 설정되지 않았습니다.")
 
-# FastAPI 앱 및 Telegram 앱 초기화
+# ✅ FastAPI 앱 초기화
 app = FastAPI()
-telegram_app = setup_telegram_app()
 
-async def process_intent(title: str, start_date: str, category: str, intent: str) -> Dict[str, Any]:
-    """
-    intent에 따른 일정 처리 공통 함수
-    """
-    try:
-        if intent == "register_schedule":
-            register_schedule(title, start_date, category)
-            create_notion_page(title, start_date, category)  # ✅ Notion에 일정 추가
-            return {"status": "success", "message": f"✅ 일정이 등록되었습니다: {title} ({start_date})"}
-
-        elif intent == "delete_schedule":
-            delete_schedule(start_date)
-            return {"status": "success", "message": f"🗑️ {start_date} 일정이 삭제되었습니다."}
-
-        else:
-            return {"status": "error", "message": "❓ 알 수 없는 명령입니다."}
-    except Exception as e:
-        logger.error(f"일정 처리 중 오류 발생: {str(e)}")
-        return {"status": "error", "message": "❌ 일정 처리 중 오류가 발생했습니다."}
-
+# ✅ 텔레그램 명령 수신 엔드포인트
 @app.post("/trigger")
-async def trigger_command(request: Request):
+async def trigger(request: Request):
     try:
-        data = await request.json()
-        message = data["message"]
+        body = await request.json()
+        message = body.get("message", "")
+
+        logger.info(f"[trigger] 수신된 메시지: {message}")
+
+        # ⬇️ 명령 파싱
         title, start_date, category, intent = clarify_command(message)
 
-        result = await process_intent(title, start_date, category, intent)
+        parsed = {
+            "title": title,
+            "start_date": start_date,
+            "category": category,
+            "intent": intent
+        }
 
-        if result["status"] == "error":
-            raise HTTPException(status_code=400, detail=result["message"])
-        return result
+        logger.debug(f"[trigger] clarify 결과: {parsed}")
+
+        # ⬇️ intent 기반 분기
+        if intent == "register_schedule":
+            cal_result = register_to_calendar(parsed)
+            notion_result = save_to_notion(parsed)
+            return {
+                "status": "success",
+                "calendar": cal_result,
+                "notion": notion_result
+            }
+
+        elif intent == "delete_schedule":
+            return {
+                "status": "ready",
+                "message": "삭제 기능은 추후 구현됩니다."
+            }
+
+        else:
+            return {
+                "status": "ignored",
+                "message": "처리 가능한 명령이 아닙니다."
+            }
+
     except Exception as e:
-        logger.error(f"Trigger 처리 중 오류 발생: {str(e)}")
-        raise HTTPException(status_code=500, detail="❌ 서버 내부 오류가 발생했습니다.")
+        logger.error(f"[trigger] 오류 발생: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/webhook")
-async def handle_telegram_update(request: Request):
+
+# ✅ clarify 단독 테스트용 엔드포인트
+@app.post("/clarify")
+async def clarify_test(request: Request):
     try:
-        data = await request.json()
-        update = telegram_app.parse_update(data)
+        body = await request.json()
+        message = body.get("message", "")
+        title, start_date, category, intent = clarify_command(message)
 
-        if update.message and update.message.text:
-            message_text = update.message.text
-            title, start_date, category, intent = clarify_command(message_text)
+        return {
+            "title": title,
+            "start_date": start_date,
+            "category": category,
+            "intent": intent
+        }
 
-            result = await process_intent(title, start_date, category, intent)
-            await update.message.reply_text(result["message"])
     except Exception as e:
-        logger.error(f"Webhook 처리 중 오류 발생: {str(e)}")
-        if "update" in locals() and update.message:
-            await update.message.reply_text("❌ 처리 중 오류가 발생했습니다.")
-
-@app.get("/")
-def read_root():
-    return {"status": "running", "service": "Jarvis Automation Server"}
-
-if __name__ == "__main__":
-    import uvicorn
-    logger.info("🚀 Jarvis Automation Server 시작")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        logger.error(f"[clarify] 테스트 오류 발생: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
