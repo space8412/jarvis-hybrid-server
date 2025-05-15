@@ -3,10 +3,22 @@ from typing import Tuple, Optional
 from datetime import datetime, timedelta
 import logging
 from dateutil import parser
-from dateutil.relativedelta import relativedelta
 import jamo
 
 logger = logging.getLogger(__name__)
+
+# ✅ intent 분기 키워드 목록
+REGISTER_KEYWORDS = [
+    "등록", "추가", "넣어", "잡아", "기록해", "예정", "메모", "잊지 말고", "남겨", "저장"
+]
+
+DELETE_KEYWORDS = [
+    "삭제", "지워", "취소", "없애", "제거", "빼", "날려", "말소", "무시", "필요 없어", "제거해"
+]
+
+UPDATE_KEYWORDS = [
+    "수정", "변경", "바꿔", "미뤄", "조정", "업데이트", "늦게", "앞당겨", "취소하고", "대신", "반영해"
+]
 
 def parse_korean_date(date_str: str) -> Optional[datetime]:
     """
@@ -58,23 +70,34 @@ def clarify_command(message: str) -> Tuple[str, str, str, str]:
         ]
         date_pattern = "|".join(date_patterns)
 
-        if "등록" in message or "추가" in message:
-            intent = "register_schedule"
-            title_match = re.search(f"(.+?)({date_pattern})", message)
-            if title_match:
-                title = title_match.group(1).strip()
+        # ✅ intent 분기 처리
+        for word in REGISTER_KEYWORDS:
+            if word in message:
+                intent = "register_schedule"
+                break
 
-            date_match = re.search(date_pattern, message)
-            if date_match:
-                start_date = date_match.group(0)
+        for word in DELETE_KEYWORDS:
+            if word in message:
+                intent = "delete_schedule"
+                break
 
-        elif "삭제" in message or "제거" in message:
-            intent = "delete_schedule"
-            date_match = re.search(r"(\d{1,2}월\s*\d{1,2}일)", message)
-            if date_match:
-                start_date = date_match.group(1)
+        for word in UPDATE_KEYWORDS:
+            if word in message:
+                intent = "update_schedule"
+                break
 
-        category_keywords = ["회의", "미팅", "약속", "휴가", "이벤트"]
+        # ✅ title 추출
+        title_match = re.search(f"(.+?)({date_pattern})", message)
+        if title_match:
+            title = title_match.group(1).strip()
+
+        # ✅ 날짜 추출
+        date_match = re.search(date_pattern, message)
+        if date_match:
+            start_date = date_match.group(0)
+
+        # ✅ 카테고리 키워드 추출 (간단한 키워드 기반)
+        category_keywords = ["회의", "미팅", "약속", "상담", "콘텐츠", "개인", "시공", "공사"]
         for keyword in category_keywords:
             if keyword in message:
                 category = keyword
@@ -83,7 +106,7 @@ def clarify_command(message: str) -> Tuple[str, str, str, str]:
     except Exception as e:
         logger.error(f"명령 파싱 오류 발생: {str(e)}")
 
-    # ✅ 파싱 결과 로깅 추가
+    # ✅ 파싱 결과 디버깅 로그
     logger.debug(f"[clarify_command] 파싱 결과 → title: {title}, date: {start_date}, category: {category}, intent: {intent}")
 
     return title, start_date, category, intent
