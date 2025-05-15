@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 from tools.telegram_parser import setup_telegram_app
 from tools.clarify import clarify_command
-from tools.calendar_register import register_to_calendar
+from tools.calendar_register import register_schedule
 from tools.notion_writer import save_to_notion
 from tools.calendar_update import update_schedule
 from tools.calendar_delete import delete_schedule
@@ -48,12 +48,11 @@ async def trigger(request: Request):
 
         # ⬇️ intent 기반 분기
         if intent == "register_schedule":
-            cal_result = register_to_calendar(parsed)
-            notion_result = save_to_notion(parsed)
+            register_schedule(title, start_date, category)
+            save_to_notion(title, start_date, category)
             return {
                 "status": "success",
-                "calendar": cal_result,
-                "notion": notion_result
+                "message": f"{start_date} 일정 등록 완료"
             }
 
         elif intent == "update_schedule":
