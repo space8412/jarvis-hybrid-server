@@ -1,8 +1,12 @@
+import os
+import json
 from datetime import datetime
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 
-creds = Credentials.from_authorized_user_file("token.json", ["https://www.googleapis.com/auth/calendar"])
+# ✅ 환경변수로부터 인증 정보 불러오기
+creds_json = os.getenv("GOOGLE_CALENDAR_CREDENTIALS")
+creds = Credentials.from_authorized_user_info(json.loads(creds_json), ["https://www.googleapis.com/auth/calendar"])
 calendar_service = build("calendar", "v3", credentials=creds)
 
 def delete_schedule(start_date: str):
@@ -11,11 +15,11 @@ def delete_schedule(start_date: str):
     
     :param start_date: 삭제할 일정 날짜 (e.g. "5월 17일") 
     """
-    start_date_obj = datetime.strptime(start_date, "%m월 %d일")
-    start_date_str = start_date_obj.strftime("%Y-%m-%d")
-    end_date_str = start_date_obj.strftime("%Y-%m-%d")
-    
     try:
+        start_date_obj = datetime.strptime(start_date, "%m월 %d일")
+        start_date_str = start_date_obj.strftime("%Y-%m-%d")
+        end_date_str = start_date_obj.strftime("%Y-%m-%d")
+
         events_result = calendar_service.events().list(
             calendarId="primary",
             timeMin=start_date_str + "T00:00:00Z",
