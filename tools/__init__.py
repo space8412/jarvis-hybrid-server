@@ -4,7 +4,7 @@ from .verify_database import DatabaseVerifier
 from .clarify import MessageClarifier
 
 __all__ = [
-    'NotionWriter',
+    'create_notion_page',  # 실제 notion_writer.py에 있는 함수
     'TelegramParser',
     'DatabaseVerifier',
     'MessageClarifier'
