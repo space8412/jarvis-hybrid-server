@@ -91,7 +91,5 @@ def read_root():
 
 if __name__ == "__main__":
     import uvicorn
-        logger.info("🚀 Jarvis Automation Server 시작")
-        uvicorn.run(app, host="0.0.0.0", port=8000)
-    else:
-        logger.error("❌ Redis 초기화 실패로 서버가 시작되지 않았습니다.")
+    logger.info("🚀 Jarvis Automation Server 시작")
+    uvicorn.run(app, host="0.0.0.0", port=8000)
