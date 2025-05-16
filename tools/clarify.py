@@ -4,7 +4,7 @@ from typing import Dict, Optional
 from datetime import datetime
 import dateparser
 
-from tools.gpt_utils import gpt_date_fallback  # ✅ GPT 보정 함수 불러오기
+from tools.gpt_utils import gpt_date_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
     }
 
     try:
+        # intent 분류
         for word in REGISTER_KEYWORDS:
             if word in message:
                 result["intent"] = "register_schedule"
@@ -44,6 +45,7 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
                 result["intent"] = "update_schedule"
                 break
 
+        # category 추출
         for keyword in CATEGORY_KEYWORDS:
             if keyword in message:
                 result["category"] = keyword
@@ -54,10 +56,12 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
         full_date_match = re.search(date_regex, message)
 
         parsed_date = None
+        gpt_result = ""
+
         if full_date_match:
             date_str = full_date_match.group(0).strip()
 
-            # ✅ 1차: dateparser 시도
+            # 1차 시도: dateparser 직접 처리
             parsed_date = dateparser.parse(
                 date_str,
                 languages=["ko"],
@@ -70,11 +74,13 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
                 }
             )
 
-            # ✅ 2차: GPT 보정 시도 → dateparser로 후속 처리
+            # 2차 시도: GPT 보정 → 다시 dateparser로 파싱
             if not parsed_date:
                 logger.warning(f"[clarify] dateparser 실패 → GPT 보정 시도: {date_str}")
                 try:
                     gpt_result = gpt_date_fallback(date_str)
+                    logger.info(f"[clarify] GPT 응답: {gpt_result}")
+
                     parsed_date = dateparser.parse(
                         gpt_result,
                         languages=["ko"],
@@ -90,8 +96,8 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
                         logger.info(f"[clarify] GPT 보정 성공 → {parsed_date.isoformat()}")
                     else:
                         logger.warning(f"[clarify] GPT 보정 후에도 파싱 실패")
-                except Exception:
-                    logger.warning(f"[clarify] GPT 보정 실패")
+                except Exception as e:
+                    logger.warning(f"[clarify] GPT 보정 중 오류 발생: {str(e)}")
 
         if parsed_date:
             result["start_date"] = parsed_date.isoformat()
