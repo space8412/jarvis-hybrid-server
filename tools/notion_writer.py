@@ -1,14 +1,14 @@
 import os
-from notion_client import Client
-from datetime import datetime
 import logging
+from datetime import datetime
+from notion_client import Client
 
 logger = logging.getLogger(__name__)
 
 notion = Client(auth=os.environ["NOTION_TOKEN"])
 database_id = os.environ["NOTION_DATABASE_ID"]
 
-# ✅ 일정 저장
+
 def save_to_notion(data: dict) -> dict:
     title = data["title"]
     date_str = data["start_date"]
@@ -19,7 +19,6 @@ def save_to_notion(data: dict) -> dict:
     except ValueError:
         raise Exception(f"날짜 변환 실패: {date_str}")
 
-    # ✅ 기존 일정 확인
     response = notion.databases.query(
         **{
             "database_id": database_id,
@@ -27,7 +26,7 @@ def save_to_notion(data: dict) -> dict:
                 "and": [
                     {"property": "Name", "title": {"equals": title}},
                     {"property": "Date", "date": {"on_or_after": date.isoformat()}},
-                    {"property": "Category", "select": {"equals": category}},
+                    {"property": "Category", "select": {"equals": category}}
                 ]
             }
         }
@@ -54,7 +53,6 @@ def save_to_notion(data: dict) -> dict:
             )
             return {"status": "skipped", "message": "이미 등록된 일정입니다."}
 
-    # ✅ 새 일정 등록
     notion.pages.create(
         **{
             "parent": {"database_id": database_id},
@@ -72,35 +70,64 @@ def save_to_notion(data: dict) -> dict:
     return {"status": "created", "message": "일정이 등록되었습니다."}
 
 
-# ✅ 일정 삭제
 def delete_from_notion(title: str, date_str: str, category: str) -> str:
     try:
         date = datetime.fromisoformat(date_str)
     except ValueError:
-        raise Exception(f"날짜 변환 실패: {date_str}")
+        raise Exception(f"날짜 파싱 실패: {date_str}")
 
     response = notion.databases.query(
-        **{
-            "database_id": database_id,
-            "filter": {
-                "and": [
-                    {"property": "Name", "title": {"equals": title}},
-                    {"property": "Date", "date": {"on_or_after": date.isoformat()}},
-                    {"property": "Category", "select": {"equals": category}},
-                ]
-            }
+        database_id=database_id,
+        filter={
+            "and": [
+                {"property": "Name", "title": {"equals": title}},
+                {"property": "Date", "date": {"on_or_after": date.isoformat()}},
+                {"property": "Category", "select": {"equals": category}}
+            ]
         }
     )
 
-    deleted = 0
-    for page in response.get("results", []):
-        page_id = page["id"]
-        notion.pages.update(page_id=page_id, archived=True)
-        deleted += 1
+    results = response.get("results", [])
+    if not results:
+        return f"📭 삭제 대상 없음: {title} ({date_str})"
 
-    if deleted == 0:
-        logger.warning(f"⚠️ Notion에서 삭제 대상 없음: {title}, {date_str}, {category}")
-        return "Notion에서 삭제 대상 없음"
-    else:
-        logger.info(f"🗑️ Notion 일정 삭제 완료 ({deleted}건)")
-        return f"Notion에서 {deleted}건 삭제됨"
+    for page in results:
+        page_id = page["id"]
+        notion.blocks.delete(block_id=page_id)
+
+    return f"🗑️ Notion에서 {len(results)}건 삭제 완료"
+
+
+def update_notion_schedule(origin_title: str, origin_date: str, new_date: str, category: str):
+    try:
+        origin_dt = datetime.fromisoformat(origin_date)
+        new_dt = datetime.fromisoformat(new_date)
+    except Exception as e:
+        raise Exception(f"날짜 파싱 실패: {e}")
+
+    response = notion.databases.query(
+        database_id=database_id,
+        filter={
+            "and": [
+                {"property": "Name", "title": {"equals": origin_title}},
+                {"property": "Date", "date": {"on_or_after": origin_dt.isoformat()}},
+                {"property": "Category", "select": {"equals": category}}
+            ]
+        }
+    )
+
+    results = response.get("results", [])
+    if not results:
+        logger.warning(f"⚠️ 수정 대상 일정 없음: {origin_title} ({origin_date})")
+        return
+
+    for page in results:
+        page_id = page["id"]
+        notion.pages.update(
+            page_id=page_id,
+            properties={"Date": {"date": {"start": new_dt.isoformat()}}}
+        )
+
+        logger.info(
+            f"🔁 Notion 일정 수정 완료: {origin_title} → {new_dt.isoformat()}"
+        )
