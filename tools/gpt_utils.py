@@ -1,10 +1,12 @@
 import os
-import openai
 import logging
 from datetime import datetime
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
-openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# ✅ 최신 openai SDK 방식 (v1.x 이상)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def gpt_date_fallback(text: str) -> str:
     """
@@ -13,13 +15,13 @@ def gpt_date_fallback(text: str) -> str:
     """
     try:
         prompt = f"'{text}' 를 ISO 8601 형식(예: 2025-05-18T14:00:00)으로 변환해줘. 결과만 딱 한 줄로 줘."
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[{"role": "user", "content": prompt}],
             temperature=0
         )
         iso_text = response.choices[0].message.content.strip()
-        datetime.fromisoformat(iso_text)  # 형식 검증
+        datetime.fromisoformat(iso_text)  # ISO 형식 검증
         return iso_text
 
     except Exception as e:
