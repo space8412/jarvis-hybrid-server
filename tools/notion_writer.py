@@ -59,8 +59,9 @@ def save_to_notion(parsed_data: dict) -> dict:
 
 def delete_from_notion(parsed_data: dict) -> dict:
     try:
-        title = parsed_data.get("title")
-        date = parsed_data.get("start_date") or parsed_data.get("date")
+        # ✅ origin 기준 삭제
+        title = parsed_data.get("origin_title") or parsed_data.get("title")
+        date = parsed_data.get("origin_date") or parsed_data.get("start_date") or parsed_data.get("date")
 
         if not title or not date:
             raise ValueError("❌ 삭제를 위해 title과 date가 필요합니다.")
@@ -79,13 +80,13 @@ def delete_from_notion(parsed_data: dict) -> dict:
                     {
                         "property": "일정 제목",
                         "title": {
-                            "contains": title
+                            "equals": title
                         }
                     },
                     {
                         "property": "날짜",
                         "date": {
-                            "equals": date.date().isoformat()
+                            "equals": date.isoformat()
                         }
                     }
                 ]
@@ -94,12 +95,12 @@ def delete_from_notion(parsed_data: dict) -> dict:
 
         results = result.get("results", [])
         if not results:
-            return {"status": "not_found", "message": f"{title} 일정 없음"}
+            return {"status": "not_found", "message": f"일정 찾을 수 없음: {title} - {date}"}
 
         for page in results:
             notion.pages.update(page["id"], archived=True)
 
-        logger.info(f"🗑️ Notion 일정 삭제 완료: {title}")
+        logger.info(f"🗑️ Notion 정확 삭제 완료: {title}")
         return {"status": "success", "deleted": len(results)}
 
     except Exception as e:
