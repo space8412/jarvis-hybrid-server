@@ -33,6 +33,9 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
     }
 
     try:
+        # ✅ 입력 메시지 전처리
+        message = message.replace("\n", " ").replace("  ", " ").strip()
+
         # intent 판별
         for word in REGISTER_KEYWORDS:
             if word in message:
@@ -89,7 +92,6 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
             for cmd in ["등록해줘", "추가해줘", "기록해줘", "예정"]:
                 title_candidate = title_candidate.replace(cmd, "")
 
-            # ✅ 접두사 제거 (Python 3.9 이상 지원)
             if title_candidate.startswith("에 "):
                 title_candidate = title_candidate[2:]
 
