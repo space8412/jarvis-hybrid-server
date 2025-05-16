@@ -1,6 +1,8 @@
 import re
 from typing import Dict, Optional
 import logging
+from datetime import datetime
+import dateparser  # ✅ 추가
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +57,21 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
         date_regex = "|".join(DATE_PATTERNS)
         full_date_match = re.search(date_regex, message)
         if full_date_match:
-            result["start_date"] = full_date_match.group(0).strip()
+            date_str = full_date_match.group(0).strip()
+            # ✅ dateparser로 미래 날짜 기준 보정 파싱
+            parsed_date = dateparser.parse(
+                date_str,
+                settings={
+                    "PREFER_DATES_FROM": "future",
+                    "RELATIVE_BASE": datetime.now(),  # 기준일을 오늘로
+                    "TIMEZONE": "Asia/Seoul",
+                    "RETURN_AS_TIMEZONE_AWARE": False
+                }
+            )
+            if parsed_date:
+                result["start_date"] = parsed_date.isoformat()
+            else:
+                logger.warning(f"[clarify] 날짜 파싱 실패: {date_str}")
         else:
             logger.warning(f"[clarify] 날짜 추출 실패: {message}")
 
