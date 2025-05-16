@@ -11,7 +11,7 @@ from tools.calendar_register import register_schedule
 from tools.calendar_update import update_schedule
 from tools.calendar_delete import delete_schedule
 from tools.notion_writer import (
-    save_to_notion,              # ✅ 수정된 import
+    save_to_notion,
     delete_from_notion,
     update_notion_schedule
 )
@@ -19,7 +19,7 @@ from tools.notion_writer import (
 # ✅ .env 환경변수 로드
 load_dotenv()
 
-# ✅ 로그 레벨 설정 (기본값 INFO)
+# ✅ 로그 레벨 설정
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=getattr(logging, log_level))
 logger = logging.getLogger(__name__)
@@ -33,7 +33,6 @@ for var in REQUIRED_ENV_VARS:
 # ✅ FastAPI 앱 초기화
 app = FastAPI()
 
-# ✅ 텔레그램 명령 수신 엔드포인트
 @app.post("/trigger")
 async def trigger(request: Request):
     try:
@@ -42,8 +41,6 @@ async def trigger(request: Request):
         message_text = msg_obj.get("text", "")
 
         logger.info(f"[trigger] 수신된 메시지: {message_text}")
-
-        # ⬇️ 명령 파싱 (단 1회만 실행)
         parsed = clarify_command(message_text)
         logger.debug(f"[trigger] clarify 결과: {parsed}")
 
@@ -54,34 +51,53 @@ async def trigger(request: Request):
         origin_title = parsed.get("origin_title", "")
         origin_date = parsed.get("origin_date", "")
 
-        # ⬇️ intent 기반 분기 처리
+        notion_result = None
+        calendar_result = None
+
         if intent == "register_schedule":
-            register_schedule(title, start_date, category)
-            save_to_notion(parsed)  # ✅ 수정된 함수명 및 인자
-            return {"status": "success", "message": f"{start_date} 일정 등록 완료"}
+            try:
+                register_schedule(title, start_date, category)
+                calendar_result = "✅ Google Calendar 등록 완료"
+            except Exception as e:
+                calendar_result = f"❌ 캘린더 등록 실패: {e}"
+
+            try:
+                notion_result = save_to_notion(parsed)
+            except Exception as e:
+                notion_result = f"❌ Notion 등록 실패: {e}"
 
         elif intent == "update_schedule":
-            update_schedule(
-                origin_title=origin_title,
-                origin_date=origin_date,
-                new_date=start_date,
-                category=category
-            )
-            update_notion_schedule(
-                origin_title=origin_title,
-                origin_date=origin_date,
-                new_date=start_date,
-                category=category
-            )
-            return {"status": "success", "message": f"{origin_date} → {start_date} 일정 수정 완료"}
+            try:
+                update_schedule(origin_title, origin_date, start_date, category)
+                calendar_result = "✅ Google Calendar 수정 완료"
+            except Exception as e:
+                calendar_result = f"❌ 캘린더 수정 실패: {e}"
+
+            try:
+                update_notion_schedule(origin_title, origin_date, start_date, category)
+                notion_result = "✅ Notion 수정 완료"
+            except Exception as e:
+                notion_result = f"❌ Notion 수정 실패: {e}"
 
         elif intent == "delete_schedule":
-            delete_result = delete_schedule(title, start_date, category)
-            notion_result = delete_from_notion(title, start_date, category)
-            return {"status": "success", "message": f"{delete_result} / {notion_result}"}
+            try:
+                calendar_result = delete_schedule(title, start_date, category)
+            except Exception as e:
+                calendar_result = f"❌ 캘린더 삭제 실패: {e}"
+
+            try:
+                notion_result = delete_from_notion(title, start_date, category)
+            except Exception as e:
+                notion_result = f"❌ Notion 삭제 실패: {e}"
 
         else:
             return {"status": "ignored", "message": "처리 가능한 명령이 아닙니다."}
+
+        return {
+            "status": "success",
+            "calendar": calendar_result,
+            "notion": notion_result
+        }
 
     except Exception as e:
         logger.error(f"[trigger] 오류 발생: {str(e)}")
@@ -90,8 +106,6 @@ async def trigger(request: Request):
             "message": str(e)
         })
 
-
-# ✅ clarify 단독 테스트용 엔드포인트
 @app.post("/clarify")
 async def clarify_test(request: Request):
     try:
