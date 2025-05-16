@@ -56,18 +56,22 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
         # 날짜 추출
         date_regex = "|".join(DATE_PATTERNS)
         full_date_match = re.search(date_regex, message)
+
         if full_date_match:
             date_str = full_date_match.group(0).strip()
-            # ✅ dateparser로 미래 날짜 기준 보정 파싱
+
+            # ✅ dateparser로 미래 기준 보정
             parsed_date = dateparser.parse(
                 date_str,
+                languages=["ko"],
                 settings={
                     "PREFER_DATES_FROM": "future",
-                    "RELATIVE_BASE": datetime.now(),  # 기준일을 오늘로
+                    "RELATIVE_BASE": datetime.now(),
                     "TIMEZONE": "Asia/Seoul",
                     "RETURN_AS_TIMEZONE_AWARE": False
                 }
             )
+
             if parsed_date:
                 result["start_date"] = parsed_date.isoformat()
             else:
@@ -75,17 +79,21 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
         else:
             logger.warning(f"[clarify] 날짜 추출 실패: {message}")
 
-        # title 추출 (날짜 이후 나오는 문장 → 등록해줘, 추가해줘 제거)
+        # title 추출 (날짜 이후 문장에서 명령어 제거)
         if full_date_match:
             end = full_date_match.end()
-            remaining = message[end:]
-            result["title"] = (
-                remaining.lstrip("에 ").replace("등록해줘", "")
-                        .replace("추가해줘", "")
-                        .replace("기록해줘", "")
-                        .replace("예정", "")
-                        .strip()
-            )
+            remaining = message[end:].strip()
+            title_candidate = remaining
+
+            # ✅ 명령어 제거
+            for cmd in ["등록해줘", "추가해줘", "기록해줘", "예정"]:
+                title_candidate = title_candidate.replace(cmd, "")
+
+            # ✅ 접두사 제거 (Python 3.9 이상 지원)
+            if title_candidate.startswith("에 "):
+                title_candidate = title_candidate[2:]
+
+            result["title"] = title_candidate.strip()
 
         logger.debug(f"[clarify] 파싱 결과: {result}")
         return result
