@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timedelta
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from google.auth.transport.requests import Request  # ✅ 추가
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
@@ -16,7 +17,18 @@ except json.JSONDecodeError:
     logger.error("❌ GOOGLE_CALENDAR_CREDENTIALS JSON 형식 오류")
     raise RuntimeError("Google Calendar 인증 정보 파싱 실패")
 
+# ✅ 인증 객체 생성
 creds = Credentials.from_authorized_user_info(creds_data, ["https://www.googleapis.com/auth/calendar"])
+
+# ✅ 토큰 만료 시 자동 갱신
+if creds.expired and creds.refresh_token:
+    try:
+        creds.refresh(Request())
+        logger.info("🔄 Google Calendar 토큰 자동 갱신 완료")
+    except Exception as e:
+        logger.error(f"❌ Google Calendar 토큰 갱신 실패: {e}")
+        raise RuntimeError("Google Calendar 인증 갱신 실패")
+
 calendar_service = build("calendar", "v3", credentials=creds)
 
 # ✅ 제목 비교 정규화 함수
