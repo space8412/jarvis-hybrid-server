@@ -17,27 +17,29 @@ def ensure_kst_timezone(date_str: str) -> str:
     except Exception:
         raise ValueError(f"❌ 잘못된 ISO 날짜 형식: {date_str}")
 
+# ✅ 중복 일정 수동 검사
+def is_duplicate(title: str, date_iso: str, category: str) -> bool:
+    query = notion.databases.query(
+        database_id=database_id,
+        filter={
+            "property": "일정 제목",
+            "rich_text": {"equals": title}
+        }
+    )
+    for result in query.get("results", []):
+        prop = result["properties"]
+        d = prop.get("날짜", {}).get("date", {})
+        start = d.get("start")
+        cat = prop.get("유형", {}).get("select", {}).get("name", "")
+        if start == date_iso and cat == category:
+            return True
+    return False
+
 # ✅ 일정 등록
 def create_notion_page(title: str, date: str, category: str):
-    """
-    Notion 데이터베이스에 새로운 페이지를 생성합니다.
-    중복 일정(title + full datetime + category)이 있으면 생략합니다.
-    """
     try:
         date_iso = ensure_kst_timezone(date)
-
-        query = notion.databases.query(
-            database_id=database_id,
-            filter={
-                "and": [
-                    {"property": "일정 제목", "rich_text": {"equals": title}},
-                    {"property": "날짜", "date": {"equals": date_iso}},
-                    {"property": "유형", "select": {"equals": category}},
-                ]
-            }
-        )
-
-        if query.get("results"):
+        if is_duplicate(title, date_iso, category):
             logger.info(f"⚠️ 이미 등록된 일정입니다. (제목: {title}, 날짜: {date_iso}, 카테고리: {category}) → 등록 생략")
             return
 
@@ -63,15 +65,20 @@ def delete_from_notion(title: str, date: str, category: str) -> str:
         query = notion.databases.query(
             database_id=database_id,
             filter={
-                "and": [
-                    {"property": "일정 제목", "rich_text": {"equals": title}},
-                    {"property": "날짜", "date": {"equals": date_iso}},
-                    {"property": "유형", "select": {"equals": category}},
-                ]
+                "property": "일정 제목",
+                "rich_text": {"equals": title}
             }
         )
 
-        results = query.get("results", [])
+        results = []
+        for result in query.get("results", []):
+            prop = result["properties"]
+            d = prop.get("날짜", {}).get("date", {})
+            start = d.get("start")
+            cat = prop.get("유형", {}).get("select", {}).get("name", "")
+            if start == date_iso and cat == category:
+                results.append(result)
+
         if not results:
             return f"❌ Notion에서 해당 일정을 찾을 수 없습니다: {title}, {date_iso}, {category}"
 
@@ -93,15 +100,20 @@ def update_notion_schedule(origin_title: str, origin_date: str, new_date: str, c
         query = notion.databases.query(
             database_id=database_id,
             filter={
-                "and": [
-                    {"property": "일정 제목", "rich_text": {"equals": origin_title}},
-                    {"property": "날짜", "date": {"equals": date_old}},
-                    {"property": "유형", "select": {"equals": category}},
-                ]
+                "property": "일정 제목",
+                "rich_text": {"equals": origin_title}
             }
         )
 
-        results = query.get("results", [])
+        results = []
+        for result in query.get("results", []):
+            prop = result["properties"]
+            d = prop.get("날짜", {}).get("date", {})
+            start = d.get("start")
+            cat = prop.get("유형", {}).get("select", {}).get("name", "")
+            if start == date_old and cat == category:
+                results.append(result)
+
         if not results:
             return f"❌ Notion에서 수정 대상 일정을 찾을 수 없습니다: {origin_title}, {date_old}"
 
