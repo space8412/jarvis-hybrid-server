@@ -2,7 +2,7 @@ import re
 from typing import Dict, Optional
 import logging
 from datetime import datetime
-import dateparser  # ✅ 추가
+import dateparser  # ✅ 추가됨
 
 logger = logging.getLogger(__name__)
 
@@ -12,16 +12,16 @@ UPDATE_KEYWORDS = ["수정", "변경", "바꿔", "미뤄", "조정", "업데이�
 
 CATEGORY_KEYWORDS = ["회의", "미팅", "약속", "상담", "콘텐츠", "개인", "시공", "공사"]
 
-# 날짜 표현 정규식
+# ✅ 날짜 정규식 (뒤에 '에'까지 허용 + '시 반'까지 포함)
 DATE_PATTERNS = [
-    r"\d{1,2}월\s*\d{1,2}일\s*(오전|오후)?\s*\d{1,2}시",
+    r"\d{1,2}월\s*\d{1,2}일\s*(오전|오후)?\s*\d{1,2}시(\s*반)?(\s*에)?",
     r"\d{1,2}월\s*\d{1,2}일",
     r"오늘", r"내일", r"모레", r"다음주\s*[월화수목금토일]요일"
 ]
 
 def clarify_command(message: str) -> Dict[str, Optional[str]]:
     """
-    명령어에서 title, date, category, intent 등을 추출합니다.
+    메시지에서 title, date, category, intent 등을 추출합니다.
     """
     result = {
         "title": "",
@@ -33,10 +33,7 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
     }
 
     try:
-        # ✅ 입력 메시지 전처리
-        message = message.replace("\n", " ").replace("  ", " ").strip()
-
-        # intent 판별
+        # ✅ intent 판별
         for word in REGISTER_KEYWORDS:
             if word in message:
                 result["intent"] = "register_schedule"
@@ -50,20 +47,20 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
                 result["intent"] = "update_schedule"
                 break
 
-        # 카테고리 추출
+        # ✅ 카테고리 추출
         for keyword in CATEGORY_KEYWORDS:
             if keyword in message:
                 result["category"] = keyword
                 break
 
-        # 날짜 추출
+        # ✅ 날짜 추출 및 파싱
         date_regex = "|".join(DATE_PATTERNS)
         full_date_match = re.search(date_regex, message)
 
         if full_date_match:
             date_str = full_date_match.group(0).strip()
 
-            # ✅ dateparser로 미래 기준 보정
+            # ✅ dateparser로 날짜 해석
             parsed_date = dateparser.parse(
                 date_str,
                 languages=["ko"],
@@ -82,20 +79,18 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
         else:
             logger.warning(f"[clarify] 날짜 추출 실패: {message}")
 
-        # title 추출 (날짜 이후 문장에서 명령어 제거)
+        # ✅ title 추출
         if full_date_match:
             end = full_date_match.end()
             remaining = message[end:].strip()
-            title_candidate = remaining
 
-            # ✅ 명령어 제거
+            # 명령어 제거
             for cmd in ["등록해줘", "추가해줘", "기록해줘", "예정"]:
-                title_candidate = title_candidate.replace(cmd, "")
+                remaining = remaining.replace(cmd, "")
+            if remaining.startswith("에 "):
+                remaining = remaining[2:]
 
-            if title_candidate.startswith("에 "):
-                title_candidate = title_candidate[2:]
-
-            result["title"] = title_candidate.strip()
+            result["title"] = remaining.strip()
 
         logger.debug(f"[clarify] 파싱 결과: {result}")
         return result
