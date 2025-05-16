@@ -1,111 +1,106 @@
 import os
 import logging
-from datetime import datetime, timezone, timedelta
-from notion_client import Client
+from typing import Union, Dict, Any
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from dotenv import load_dotenv
 
+from tools.telegram_parser import setup_telegram_app
+from tools.clarify import clarify_command
+from tools.calendar_register import register_schedule
+from tools.calendar_update import update_schedule
+from tools.calendar_delete import delete_schedule
+from tools.notion_writer import (
+    create_notion_page,
+    delete_from_notion,
+    update_notion_schedule
+)
+
+# ✅ .env 환경변수 로드
+load_dotenv()
+
+# ✅ 로그 레벨 설정 (기본값 INFO)
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=getattr(logging, log_level))
 logger = logging.getLogger(__name__)
-notion = Client(auth=os.environ["NOTION_TOKEN"])
-database_id = os.environ["NOTION_DATABASE_ID"]
 
-# ✅ 한국 시간 보정
-def ensure_kst_timezone(date_str: str) -> str:
+# ✅ 필수 환경변수 확인
+REQUIRED_ENV_VARS = ["OPENAI_API_KEY", "NOTION_TOKEN", "NOTION_DATABASE_ID"]
+for var in REQUIRED_ENV_VARS:
+    if not os.getenv(var):
+        raise RuntimeError(f"❌ 환경변수 {var}가 설정되지 않았습니다.")
+
+# ✅ FastAPI 앱 초기화
+app = FastAPI()
+
+# ✅ 텔레그램 명령 수신 엔드포인트
+@app.post("/trigger")
+async def trigger(request: Request):
     try:
-        dt = datetime.fromisoformat(date_str)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone(timedelta(hours=9)))  # KST
-        return dt.isoformat()
-    except Exception:
-        raise ValueError(f"❌ 잘못된 ISO 날짜 형식: {date_str}")
+        body = await request.json()
+        msg_obj = body.get("message", {})
+        message_text = msg_obj.get("text", "")
 
-# ✅ 일정 등록
-def create_notion_page(title: str, date: str, category: str):
-    try:
-        date_iso = ensure_kst_timezone(date)
+        logger.info(f"[trigger] 수신된 메시지: {message_text}")
 
-        # 제목 기준으로 먼저 검색 후 수동 필터링
-        query = notion.databases.query(
-            database_id=database_id,
-            filter={"property": "일정 제목", "rich_text": {"equals": title}}
-        )
+        # ⬇️ 명령 파싱 (단 1회만 실행)
+        parsed = clarify_command(message_text)
+        logger.debug(f"[trigger] clarify 결과: {parsed}")
 
-        for page in query.get("results", []):
-            date_val = page["properties"]["날짜"]["date"].get("start")
-            category_val = page["properties"]["유형"]["select"].get("name")
+        intent = parsed.get("intent", "")
+        title = parsed.get("title", "")
+        start_date = parsed.get("start_date", "")
+        category = parsed.get("category", "")
+        origin_title = parsed.get("origin_title", "")
+        origin_date = parsed.get("origin_date", "")
 
-            if date_val == date_iso and category_val == category:
-                logger.info(f"⚠️ 이미 등록된 일정입니다. (제목: {title}, 날짜: {date_iso}, 카테고리: {category}) → 등록 생략")
-                return
+        # ⬇️ intent 기반 분기 처리
+        if intent == "register_schedule":
+            # ✅ 일정 등록 시 start_date 기준 하나로 모든 플랫폼에 사용
+            register_schedule(title, start_date, category)
+            create_notion_page(title, start_date, category)
+            return {"status": "success", "message": f"{start_date} 일정 등록 완료"}
 
-        notion.pages.create(
-            parent={"database_id": database_id},
-            properties={
-                "일정 제목": {"title": [{"text": {"content": title}}]},
-                "날짜": {"date": {"start": date_iso}},
-                "유형": {"select": {"name": category}},
-            }
-        )
-        logger.info(f"✅ Notion 페이지가 생성되었습니다. (제목: {title}, 날짜: {date_iso}, 카테고리: {category})")
+        elif intent == "update_schedule":
+            update_schedule(
+                origin_title=origin_title,
+                origin_date=origin_date,
+                new_date=start_date,
+                category=category
+            )
+            update_notion_schedule(
+                origin_title=origin_title,
+                origin_date=origin_date,
+                new_date=start_date,
+                category=category
+            )
+            return {"status": "success", "message": f"{origin_date} → {start_date} 일정 수정 완료"}
 
-    except Exception as e:
-        logger.error(f"❌ Notion 페이지 생성 실패: {str(e)}")
-        raise
+        elif intent == "delete_schedule":
+            delete_result = delete_schedule(title, start_date, category)
+            notion_result = delete_from_notion(title, start_date, category)
+            return {"status": "success", "message": f"{delete_result} / {notion_result}"}
 
-# ✅ 일정 삭제
-def delete_from_notion(title: str, date: str, category: str) -> str:
-    try:
-        date_iso = ensure_kst_timezone(date)
-
-        query = notion.databases.query(
-            database_id=database_id,
-            filter={"property": "일정 제목", "rich_text": {"equals": title}}
-        )
-
-        deleted = False
-        for page in query.get("results", []):
-            date_val = page["properties"]["날짜"]["date"].get("start")
-            category_val = page["properties"]["유형"]["select"].get("name")
-
-            if date_val == date_iso and category_val == category:
-                notion.pages.update(page["id"], archived=True)
-                deleted = True
-
-        if deleted:
-            return f"✅ Notion 일정 삭제 완료: {title} ({date_iso})"
         else:
-            return f"❌ Notion에서 해당 일정을 찾을 수 없습니다: {title}, {date_iso}, {category}"
+            return {"status": "ignored", "message": "처리 가능한 명령이 아닙니다."}
 
     except Exception as e:
-        logger.error(f"❌ Notion 일정 삭제 오류: {str(e)}")
-        raise
+        logger.error(f"[trigger] 오류 발생: {str(e)}")
+        return JSONResponse(status_code=200, content={
+            "status": "error",
+            "message": str(e)
+        })
 
-# ✅ 일정 수정
-def update_notion_schedule(origin_title: str, origin_date: str, new_date: str, category: str) -> str:
+
+# ✅ clarify 단독 테스트용 엔드포인트
+@app.post("/clarify")
+async def clarify_test(request: Request):
     try:
-        date_old = ensure_kst_timezone(origin_date)
-        date_new = ensure_kst_timezone(new_date)
-
-        query = notion.databases.query(
-            database_id=database_id,
-            filter={"property": "일정 제목", "rich_text": {"equals": origin_title}}
-        )
-
-        updated = False
-        for page in query.get("results", []):
-            date_val = page["properties"]["날짜"]["date"].get("start")
-            category_val = page["properties"]["유형"]["select"].get("name")
-
-            if date_val == date_old and category_val == category:
-                notion.pages.update(
-                    page["id"],
-                    properties={"날짜": {"date": {"start": date_new}}}
-                )
-                updated = True
-
-        if updated:
-            return f"✅ Notion 일정 수정 완료: {origin_title} → {date_new}"
-        else:
-            return f"❌ Notion에서 수정 대상 일정을 찾을 수 없습니다: {origin_title}, {date_old}"
+        body = await request.json()
+        message_text = body.get("message", "")
+        parsed = clarify_command(message_text)
+        return parsed
 
     except Exception as e:
-        logger.error(f"❌ Notion 일정 수정 오류: {str(e)}")
-        raise
+        logger.error(f"[clarify] 테스트 오류 발생: {str(e)}")
+        return JSONResponse(status_code=500, content={"detail": str(e)})
