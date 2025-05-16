@@ -3,6 +3,7 @@ uvicorn
 httpx  # 외부 API 연동 시 사용
 python-dotenv
 notion-client
+openai
 
 google-api-python-client
 google-auth
