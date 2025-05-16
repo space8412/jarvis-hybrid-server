@@ -8,47 +8,31 @@ logger = logging.getLogger(__name__)
 notion = Client(auth=os.environ["NOTION_TOKEN"])
 database_id = os.environ["NOTION_DATABASE_ID"]
 
+# ✅ 일정 저장
 def save_to_notion(data: dict) -> dict:
     title = data["title"]
     date_str = data["start_date"]
     category = data["category"]
 
-    # ✅ ISO 포맷 문자열 → datetime 객체로 변환
     try:
         date = datetime.fromisoformat(date_str)
     except ValueError:
         raise Exception(f"날짜 변환 실패: {date_str}")
 
-    # ✅ 기존 일정 조회 (title + date + category 기준)
+    # ✅ 기존 일정 확인
     response = notion.databases.query(
         **{
             "database_id": database_id,
             "filter": {
                 "and": [
-                    {
-                        "property": "Name",
-                        "title": {
-                            "equals": title
-                        }
-                    },
-                    {
-                        "property": "Date",
-                        "date": {
-                            "on_or_after": date.isoformat()
-                        }
-                    },
-                    {
-                        "property": "Category",
-                        "select": {
-                            "equals": category
-                        }
-                    }
+                    {"property": "Name", "title": {"equals": title}},
+                    {"property": "Date", "date": {"on_or_after": date.isoformat()}},
+                    {"property": "Category", "select": {"equals": category}},
                 ]
             }
         }
     )
 
-    # ✅ 동일 일정 존재 여부 확인 (시간까지 정확히 비교)
     for result in response.get("results", []):
         properties = result["properties"]
         existing_title = properties["Name"]["title"][0]["plain_text"]
@@ -75,15 +59,9 @@ def save_to_notion(data: dict) -> dict:
         **{
             "parent": {"database_id": database_id},
             "properties": {
-                "Name": {
-                    "title": [{"text": {"content": title}}]
-                },
-                "Date": {
-                    "date": {"start": date.isoformat()}
-                },
-                "Category": {
-                    "select": {"name": category}
-                },
+                "Name": {"title": [{"text": {"content": title}}]},
+                "Date": {"date": {"start": date.isoformat()}},
+                "Category": {"select": {"name": category}},
             }
         }
     )
@@ -92,3 +70,37 @@ def save_to_notion(data: dict) -> dict:
         f"✅ Notion 페이지가 생성되었습니다. (제목: {title}, 날짜: {date.isoformat()}, 카테고리: {category})"
     )
     return {"status": "created", "message": "일정이 등록되었습니다."}
+
+
+# ✅ 일정 삭제
+def delete_from_notion(title: str, date_str: str, category: str) -> str:
+    try:
+        date = datetime.fromisoformat(date_str)
+    except ValueError:
+        raise Exception(f"날짜 변환 실패: {date_str}")
+
+    response = notion.databases.query(
+        **{
+            "database_id": database_id,
+            "filter": {
+                "and": [
+                    {"property": "Name", "title": {"equals": title}},
+                    {"property": "Date", "date": {"on_or_after": date.isoformat()}},
+                    {"property": "Category", "select": {"equals": category}},
+                ]
+            }
+        }
+    )
+
+    deleted = 0
+    for page in response.get("results", []):
+        page_id = page["id"]
+        notion.pages.update(page_id=page_id, archived=True)
+        deleted += 1
+
+    if deleted == 0:
+        logger.warning(f"⚠️ Notion에서 삭제 대상 없음: {title}, {date_str}, {category}")
+        return "Notion에서 삭제 대상 없음"
+    else:
+        logger.info(f"🗑️ Notion 일정 삭제 완료 ({deleted}건)")
+        return f"Notion에서 {deleted}건 삭제됨"
