@@ -13,8 +13,7 @@ from tools.calendar_delete import delete_schedule
 from tools.notion_writer import (
     create_notion_page,
     delete_from_notion,
-    update_notion_schedule,
-    ensure_kst_timezone  # ✅ 시간 보정 함수 추가 임포트
+    update_notion_schedule
 )
 
 # ✅ .env 환경변수 로드
@@ -44,7 +43,7 @@ async def trigger(request: Request):
 
         logger.info(f"[trigger] 수신된 메시지: {message_text}")
 
-        # ⬇️ 명령 파싱
+        # ⬇️ 명령 파싱 (단 1회만 실행)
         parsed = clarify_command(message_text)
         logger.debug(f"[trigger] clarify 결과: {parsed}")
 
@@ -55,34 +54,31 @@ async def trigger(request: Request):
         origin_title = parsed.get("origin_title", "")
         origin_date = parsed.get("origin_date", "")
 
-        # ✅ start_date 값 보정 (KST 시간 포함)
-        start_date_kst = ensure_kst_timezone(start_date)
-
         # ⬇️ intent 기반 분기 처리
         if intent == "register_schedule":
-            register_schedule(title, start_date_kst, category)
-            create_notion_page(title, start_date_kst, category)
-            return {"status": "success", "message": f"{start_date_kst} 일정 등록 완료"}
+            # ✅ 일정 등록 시 start_date 기준 하나로 모든 플랫폼에 사용
+            register_schedule(title, start_date, category)
+            create_notion_page(title, start_date, category)
+            return {"status": "success", "message": f"{start_date} 일정 등록 완료"}
 
         elif intent == "update_schedule":
-            origin_date_kst = ensure_kst_timezone(origin_date)
             update_schedule(
                 origin_title=origin_title,
-                origin_date=origin_date_kst,
-                new_date=start_date_kst,
+                origin_date=origin_date,
+                new_date=start_date,
                 category=category
             )
             update_notion_schedule(
                 origin_title=origin_title,
-                origin_date=origin_date_kst,
-                new_date=start_date_kst,
+                origin_date=origin_date,
+                new_date=start_date,
                 category=category
             )
-            return {"status": "success", "message": f"{origin_date_kst} → {start_date_kst} 일정 수정 완료"}
+            return {"status": "success", "message": f"{origin_date} → {start_date} 일정 수정 완료"}
 
         elif intent == "delete_schedule":
-            delete_result = delete_schedule(title, start_date_kst, category)
-            notion_result = delete_from_notion(title, start_date_kst, category)
+            delete_result = delete_schedule(title, start_date, category)
+            notion_result = delete_from_notion(title, start_date, category)
             return {"status": "success", "message": f"{delete_result} / {notion_result}"}
 
         else:
