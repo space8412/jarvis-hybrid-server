@@ -4,7 +4,7 @@ from typing import Dict, Optional
 from datetime import datetime
 import dateparser
 
-from tools.gpt_utils import gpt_date_fallback  # ✅ GPT 보정 함수
+from tools.gpt_utils import gpt_date_fallback  # ✅ GPT 보정 함수 불러오기
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,6 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
     }
 
     try:
-        # intent 추출
         for word in REGISTER_KEYWORDS:
             if word in message:
                 result["intent"] = "register_schedule"
@@ -45,7 +44,6 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
                 result["intent"] = "update_schedule"
                 break
 
-        # category 추출
         for keyword in CATEGORY_KEYWORDS:
             if keyword in message:
                 result["category"] = keyword
@@ -56,12 +54,10 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
         full_date_match = re.search(date_regex, message)
 
         parsed_date = None
-        gpt_result = ""
-
         if full_date_match:
             date_str = full_date_match.group(0).strip()
 
-            # 1차 시도: dateparser
+            # ✅ 1차: dateparser
             parsed_date = dateparser.parse(
                 date_str,
                 languages=["ko"],
@@ -74,30 +70,15 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
                 }
             )
 
-            # 2차 시도: GPT 보정 → dateparser 재파싱
+            # ✅ 2차: GPT 보정
             if not parsed_date:
                 logger.warning(f"[clarify] dateparser 실패 → GPT 보정 시도: {date_str}")
                 try:
                     gpt_result = gpt_date_fallback(date_str)
-                    logger.info(f"[clarify] GPT 응답: {gpt_result}")
-
-                    parsed_date = dateparser.parse(
-                        gpt_result,
-                        languages=["ko"],
-                        settings={
-                            "PREFER_DATES_FROM": "future",
-                            "RELATIVE_BASE": datetime.now(),
-                            "TIMEZONE": "Asia/Seoul",
-                            "RETURN_AS_TIMEZONE_AWARE": False,
-                            "NORMALIZE": True
-                        }
-                    )
-                    if parsed_date:
-                        logger.info(f"[clarify] GPT 보정 성공 → {parsed_date.isoformat()}")
-                    else:
-                        logger.warning(f"[clarify] GPT 보정 후에도 파싱 실패")
-                except Exception as e:
-                    logger.warning(f"[clarify] GPT 보정 중 오류 발생: {str(e)}")
+                    parsed_date = datetime.fromisoformat(gpt_result)
+                    logger.info(f"[clarify] GPT 보정 성공 → {parsed_date.isoformat()}")
+                except Exception:
+                    logger.warning(f"[clarify] GPT 보정 실패")
 
         if parsed_date:
             result["start_date"] = parsed_date.isoformat()
@@ -110,7 +91,7 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
             remaining = message[end:].strip()
             title_candidate = remaining
 
-            for cmd in ["등록해줘", "추가해줘", "기록해줘", "예정", "삭제해줘", "취소해줘", "지워줘"]:
+            for cmd in ["등록해줘", "추가해줘", "기록해줘", "예정"]:
                 title_candidate = title_candidate.replace(cmd, "")
 
             if title_candidate.startswith("에 "):
@@ -118,8 +99,8 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
 
             result["title"] = title_candidate.strip()
 
-        # ✅ 삭제 명령일 경우, origin 값을 자동 채움
-        if result["intent"] == "delete_schedule":
+        # ✅ 수정 명령이면 원래 제목/날짜를 복사
+        if result["intent"] == "update_schedule":
             result["origin_title"] = result["title"]
             result["origin_date"] = result["start_date"]
 
