@@ -33,7 +33,7 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
     }
 
     try:
-        # ✅ intent 판별
+        # intent 판별
         for word in REGISTER_KEYWORDS:
             if word in message:
                 result["intent"] = "register_schedule"
@@ -47,23 +47,20 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
                 result["intent"] = "update_schedule"
                 break
 
-        # ✅ 카테고리 추출
+        # 카테고리 추출
         for keyword in CATEGORY_KEYWORDS:
             if keyword in message:
                 result["category"] = keyword
                 break
 
-        # ✅ 날짜 추출
+        # 날짜 추출
         date_regex = "|".join(DATE_PATTERNS)
         full_date_match = re.search(date_regex, message)
 
         if full_date_match:
             date_str = full_date_match.group(0).strip()
 
-            # ✅ 한국어 → 영어 시간 표현 보정
-            date_str = date_str.replace("오전", "AM").replace("오후", "PM")
-
-            # ✅ dateparser로 파싱
+            # ✅ dateparser로 미래 기준 보정 + NORMALIZE 적용
             parsed_date = dateparser.parse(
                 date_str,
                 languages=["ko"],
@@ -72,7 +69,7 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
                     "RELATIVE_BASE": datetime.now(),
                     "TIMEZONE": "Asia/Seoul",
                     "RETURN_AS_TIMEZONE_AWARE": False,
-                    "NORMALIZE": True
+                    "NORMALIZE": True  # ✅ 추가됨
                 }
             )
 
@@ -83,15 +80,17 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
         else:
             logger.warning(f"[clarify] 날짜 추출 실패: {message}")
 
-        # ✅ title 추출
+        # title 추출 (날짜 이후 문장에서 명령어 제거)
         if full_date_match:
             end = full_date_match.end()
             remaining = message[end:].strip()
             title_candidate = remaining
 
+            # ✅ 명령어 제거
             for cmd in ["등록해줘", "추가해줘", "기록해줘", "예정"]:
                 title_candidate = title_candidate.replace(cmd, "")
 
+            # ✅ 접두사 제거
             if title_candidate.startswith("에 "):
                 title_candidate = title_candidate[2:]
 
