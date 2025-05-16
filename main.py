@@ -11,7 +11,7 @@ from tools.calendar_register import register_schedule
 from tools.calendar_update import update_schedule
 from tools.calendar_delete import delete_schedule
 from tools.notion_writer import (
-    create_notion_page,
+    save_to_notion,              # ✅ 수정된 import
     delete_from_notion,
     update_notion_schedule
 )
@@ -56,9 +56,8 @@ async def trigger(request: Request):
 
         # ⬇️ intent 기반 분기 처리
         if intent == "register_schedule":
-            # ✅ 일정 등록 시 start_date 기준 하나로 모든 플랫폼에 사용
             register_schedule(title, start_date, category)
-            create_notion_page(title, start_date, category)
+            save_to_notion(parsed)  # ✅ 수정된 함수명 및 인자
             return {"status": "success", "message": f"{start_date} 일정 등록 완료"}
 
         elif intent == "update_schedule":
