@@ -4,7 +4,7 @@ from typing import Dict, Optional
 from datetime import datetime
 import dateparser
 
-from tools.gpt_utils import gpt_date_fallback
+from tools.gpt_utils import gpt_date_fallback  # ✅ GPT 보정 함수
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
     }
 
     try:
-        # intent 분류
+        # intent 추출
         for word in REGISTER_KEYWORDS:
             if word in message:
                 result["intent"] = "register_schedule"
@@ -61,7 +61,7 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
         if full_date_match:
             date_str = full_date_match.group(0).strip()
 
-            # 1차 시도: dateparser 직접 처리
+            # 1차 시도: dateparser
             parsed_date = dateparser.parse(
                 date_str,
                 languages=["ko"],
@@ -74,7 +74,7 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
                 }
             )
 
-            # 2차 시도: GPT 보정 → 다시 dateparser로 파싱
+            # 2차 시도: GPT 보정 → dateparser 재파싱
             if not parsed_date:
                 logger.warning(f"[clarify] dateparser 실패 → GPT 보정 시도: {date_str}")
                 try:
@@ -110,13 +110,18 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
             remaining = message[end:].strip()
             title_candidate = remaining
 
-            for cmd in ["등록해줘", "추가해줘", "기록해줘", "예정"]:
+            for cmd in ["등록해줘", "추가해줘", "기록해줘", "예정", "삭제해줘", "취소해줘", "지워줘"]:
                 title_candidate = title_candidate.replace(cmd, "")
 
             if title_candidate.startswith("에 "):
                 title_candidate = title_candidate[2:]
 
             result["title"] = title_candidate.strip()
+
+        # ✅ 삭제 명령일 경우, origin 값을 자동 채움
+        if result["intent"] == "delete_schedule":
+            result["origin_title"] = result["title"]
+            result["origin_date"] = result["start_date"]
 
         logger.debug(f"[clarify] 파싱 결과: {result}")
         return result
