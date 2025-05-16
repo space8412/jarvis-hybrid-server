@@ -1,103 +1,105 @@
 import re
-from typing import Dict
 import logging
-from datetime import datetime
+from typing import Dict, Optional
 import dateparser
-import openai
-import os
 
 logger = logging.getLogger(__name__)
-openai.api_key = os.environ["OPENAI_API_KEY"]
 
-# 🔹 키워드 정의
 REGISTER_KEYWORDS = ["등록", "추가", "넣어", "잡아", "기록해", "예정", "메모", "잊지 말고", "남겨", "저장"]
-DELETE_KEYWORDS = ["삭제", "지워", "취소", "없애", "제거", "빼", "날려", "말소", "무시", "필요 없어"]
-UPDATE_KEYWORDS = ["수정", "변경", "바꿔", "미뤄", "조정", "업데이트", "앞당겨", "연기", "대신", "반영해"]
+DELETE_KEYWORDS = ["삭제", "지워", "취소", "없애", "제거", "빼", "날려", "말소", "무시", "필요 없어", "제거해"]
+UPDATE_KEYWORDS = ["수정", "변경", "바꿔", "미뤄", "조정", "업데이트", "늦게", "앞당겨", "취소하고", "대신", "반영해"]
+CATEGORY_KEYWORDS = ["회의", "미팅", "상담", "시공", "공사", "개인", "콘텐츠"]
 
-CATEGORY_KEYWORDS = {
-    "회의": ["회의", "미팅", "줌", "온라인회의", "컨퍼런스"],
-    "상담": ["상담", "컨설팅", "전화"],
-    "공사": ["공사", "하스리", "미장", "철거", "도장"],
-    "시공": ["시공", "작업", "현장", "설치"],
-    "콘텐츠": ["콘텐츠", "릴스", "영상", "사진", "업로드"],
-    "개인": ["병원", "약속", "모임", "가족", "휴가"]
-}
+def extract_date(text: str) -> Optional[str]:
+    date = dateparser.parse(text, languages=["ko"], settings={"PREFER_DATES_FROM": "future"})
+    if date:
+        return date.isoformat()
+    return None
 
+def extract_intent(text: str) -> Optional[str]:
+    for word in DELETE_KEYWORDS:
+        if word in text:
+            return "delete_schedule"
+    for word in UPDATE_KEYWORDS:
+        if word in text:
+            return "update_schedule"
+    for word in REGISTER_KEYWORDS:
+        if word in text:
+            return "register_schedule"
+    return None
 
 def extract_category(text: str) -> str:
-    for category, keywords in CATEGORY_KEYWORDS.items():
-        if any(kw in text for kw in keywords):
-            return category
+    for keyword in CATEGORY_KEYWORDS:
+        if keyword in text:
+            return keyword
     return "기타"
 
-
-def extract_intent(text: str) -> str:
-    if any(kw in text for kw in REGISTER_KEYWORDS):
-        return "register_schedule"
-    elif any(kw in text for kw in DELETE_KEYWORDS):
-        return "delete_schedule"
-    elif any(kw in text for kw in UPDATE_KEYWORDS):
-        return "update_schedule"
-    else:
-        return "unknown"
-
-
-def extract_date_with_gpt(text: str) -> str:
-    logger.warning("[clarify] dateparser 실패 → GPT 보정 시도: " + text)
-    prompt = f"""
-'5월 18일 오후 2시'은 2025년을 기준으로 한 한국 시간의 날짜와 시간입니다.
-이를 ISO 8601 형식(예: 2025-05-18T14:00:00)으로 변환해줘.
-결과는 날짜와 시간만 포함된 한 줄짜리 ISO 형식 문자열로만 줘.
-불확실하더라도 예측해서 완성해줘.
-"""
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        temperature=0,
-        messages=[{"role": "user", "content": prompt.replace("5월 18일 오후 2시", text)}]
-    )
-    date_str = response["choices"][0]["message"]["content"].strip()
-
-    # 날짜만 있을 경우 T00:00:00 보완
-    if re.match(r"^\d{4}-\d{2}-\d{2}$", date_str):
-        date_str += "T00:00:00"
-        logger.warning("[clarify] GPT 응답에 시간 없음 → T00:00:00 보완 적용")
-
-    logger.info("[clarify] GPT 보정 성공 → " + date_str)
-    return date_str
-
-
 def extract_title(text: str) -> str:
-    match = re.search(r"\d+[월.]\s*\d+[일.]?\s*(오전|오후)?\s*\d{1,2}시?", text)
-    if match:
-        return text[match.end():].strip().replace("등록해줘", "").replace("삭제해줘", "").replace("수정해줘", "").strip()
-    return text
+    """
+    메시지에서 날짜, 명령어 제거 후 핵심 일정 제목만 추출
+    """
+    # 날짜/시간 제거 (예: "5월 18일 오후 2시")
+    text = re.sub(r"\d{1,2}[월.]\s*\d{1,2}[일.]?\s*(오전|오후)?\s*\d{1,2}시", "", text)
 
+    # 명령어 제거
+    for cmd in REGISTER_KEYWORDS + DELETE_KEYWORDS + UPDATE_KEYWORDS + ["해줘", "해", "줘"]:
+        text = text.replace(cmd, "")
+
+    # 조사 제거
+    for suffix in ["에", "는", "을", "를", "도", "한테", "까지", "하고"]:
+        text = text.replace(suffix, "")
+
+    return text.strip()
 
 def clarify_command(text: str) -> Dict[str, str]:
-    intent = extract_intent(text)
-    category = extract_category(text)
-    title = extract_title(text)
+    try:
+        intent = extract_intent(text)
+        raw_date = extract_date(text)
+        title = extract_title(text)
+        category = extract_category(text)
 
-    parsed_date = dateparser.parse(text, languages=["ko"], settings={"PREFER_DATES_FROM": "future"})
-    if parsed_date is None:
-        start_date = extract_date_with_gpt(text)
-    else:
-        start_date = parsed_date.isoformat()
+        parsed = {
+            "intent": intent or "",
+            "title": title,
+            "start_date": raw_date or "",
+            "category": category,
+            "origin_title": "",
+            "origin_date": "",
+        }
 
-    origin_title = ""
-    origin_date = ""
+        if not raw_date:
+            logger.warning("[clarify] dateparser 실패 → GPT 보정 시도: %s", text)
+            try:
+                from openai import OpenAI
+                import os
+                client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+                prompt = (
+                    f"'5월 18일 오후 2시'은 2025년을 기준으로 한 한국 시간의 날짜와 시간입니다.\n"
+                    f"이를 ISO 8601 형식(예: 2025-05-18T14:00:00)으로 변환해줘.\n"
+                    f"결과는 날짜와 시간만 포함된 한 줄짜리 ISO 형식 문자열로만 줘.\n"
+                    f"불확실하더라도 예측해서 완성해줘.\n"
+                )
+                response = client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0,
+                )
+                iso_date = response.choices[0].message.content.strip()
+                parsed["start_date"] = iso_date
+                logger.info("[clarify] GPT 보정 성공 → %s", iso_date)
+            except Exception as e:
+                logger.error("[clarify] GPT 보정 실패: %s", str(e))
 
-    # intent가 수정/삭제일 경우, 기존값이 있는지 예외적으로 추출 시도 (기본 구조 유지)
-    if intent in ["update_schedule", "delete_schedule"]:
-        origin_title = title
-        origin_date = start_date
+        logger.debug("[clarify] 파싱 결과: %s", parsed)
+        return parsed
 
-    logger.debug(f"[clarify] 파싱 결과: title={title}, start_date={start_date}, category={category}, intent={intent}")
-    return {
-        "title": title,
-        "start_date": start_date,
-        "category": category,
-        "intent": intent,
-        "origin_title": origin_title,
-        "origin_date": origin_date
-    }
+    except Exception as e:
+        logger.error(f"[clarify] 예외 발생: {str(e)}")
+        return {
+            "intent": "",
+            "title": "",
+            "start_date": "",
+            "category": "",
+            "origin_title": "",
+            "origin_date": "",
+        }
