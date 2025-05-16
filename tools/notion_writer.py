@@ -2,6 +2,7 @@ import os
 import logging
 from datetime import datetime, timezone, timedelta
 from notion_client import Client
+from dateutil.parser import isoparse  # ✅ 중복 일정 비교 개선용 추가
 
 logger = logging.getLogger(__name__)
 notion = Client(auth=os.environ["NOTION_TOKEN"])
@@ -32,7 +33,8 @@ def create_notion_page(title: str, date: str, category: str):
             date_val = page["properties"]["날짜"]["date"].get("start")
             category_val = page["properties"]["유형"]["select"].get("name")
 
-            if date_val == date_iso and category_val == category:
+            # ✅ 중복 등록 방지 개선: 시간까지 정확히 비교
+            if isoparse(date_val) == isoparse(date_iso) and category_val == category:
                 logger.info(f"⚠️ 이미 등록된 일정입니다. (제목: {title}, 날짜: {date_iso}, 카테고리: {category}) → 등록 생략")
                 return
 
@@ -65,7 +67,7 @@ def delete_from_notion(title: str, date: str, category: str) -> str:
             date_val = page["properties"]["날짜"]["date"].get("start")
             category_val = page["properties"]["유형"]["select"].get("name")
 
-            if date_val == date_iso and category_val == category:
+            if isoparse(date_val) == isoparse(date_iso) and category_val == category:  # ✅ 삭제도 동일 비교
                 notion.pages.update(page["id"], archived=True)
                 deleted = True
 
@@ -94,7 +96,7 @@ def update_notion_schedule(origin_title: str, origin_date: str, new_date: str, c
             date_val = page["properties"]["날짜"]["date"].get("start")
             category_val = page["properties"]["유형"]["select"].get("name")
 
-            if date_val == date_old and category_val == category:
+            if isoparse(date_val) == isoparse(date_old) and category_val == category:  # ✅ 수정도 정확히 비교
                 notion.pages.update(
                     page["id"],
                     properties={"날짜": {"date": {"start": date_new}}}
