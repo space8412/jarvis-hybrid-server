@@ -4,6 +4,7 @@ import logging
 from datetime import datetime
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from google.auth.transport.requests import Request  # ✅ 추가됨
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,19 @@ if not creds_json:
     raise RuntimeError("❌ GOOGLE_CALENDAR_CREDENTIALS 환경변수가 없습니다.")
 
 creds_data = json.loads(creds_json)
-creds = Credentials.from_authorized_user_info(creds_data, ["https://www.googleapis.com/auth/calendar"])
+creds = Credentials.from_authorized_user_info(
+    creds_data, ["https://www.googleapis.com/auth/calendar"]
+)
+
+# ✅ 만료된 경우 토큰 자동 갱신
+if creds.expired and creds.refresh_token:
+    try:
+        creds.refresh(Request())
+        logger.info("🔄 Google Calendar 토큰 자동 갱신 완료")
+    except Exception as e:
+        logger.error(f"❌ Google Calendar 토큰 갱신 실패: {e}")
+        raise RuntimeError("Google Calendar 인증 갱신 실패")
+
 calendar_service = build("calendar", "v3", credentials=creds)
 
 # ✅ 제목 정규화 함수
