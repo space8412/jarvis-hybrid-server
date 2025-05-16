@@ -5,6 +5,7 @@ from datetime import datetime
 from dateutil import parser
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from google.auth.transport.requests import Request  # 🔹 추가
 
 from tools.notion_writer import create_notion_page
 
@@ -16,11 +17,22 @@ if not creds_json:
     logger.error("❌ GOOGLE_CALENDAR_CREDENTIALS 환경변수가 설정되지 않았습니다.")
     raise RuntimeError("구글 인증 정보 누락")
 
-# ✅ 구글 캘린더 서비스 초기화
+# ✅ 구글 인증 정보 객체 생성
 creds = Credentials.from_authorized_user_info(
     json.loads(creds_json),
     ["https://www.googleapis.com/auth/calendar"]
 )
+
+# ✅ 만료된 경우 토큰 자동 갱신
+if creds.expired and creds.refresh_token:
+    try:
+        creds.refresh(Request())
+        logger.info("🔄 Google Calendar 토큰 자동 갱신 완료")
+    except Exception as e:
+        logger.error(f"❌ Google Calendar 토큰 갱신 실패: {e}")
+        raise RuntimeError("Google Calendar 인증 갱신 실패")
+
+# ✅ 캘린더 서비스 초기화
 calendar_service = build("calendar", "v3", credentials=creds)
 
 def register_schedule(title: str, start_date: str, category: str):
