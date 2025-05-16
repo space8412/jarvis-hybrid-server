@@ -8,9 +8,13 @@ from dotenv import load_dotenv
 from tools.telegram_parser import setup_telegram_app
 from tools.clarify import clarify_command
 from tools.calendar_register import register_schedule
-from tools.notion_writer import create_notion_page
 from tools.calendar_update import update_schedule
 from tools.calendar_delete import delete_schedule
+from tools.notion_writer import (
+    create_notion_page,
+    delete_from_notion,
+    update_notion_schedule
+)
 
 # ✅ .env 환경변수 로드
 load_dotenv()
@@ -47,8 +51,10 @@ async def trigger(request: Request):
         title = parsed.get("title", "")
         start_date = parsed.get("start_date", "")
         category = parsed.get("category", "")
+        origin_title = parsed.get("origin_title", "")
+        origin_date = parsed.get("origin_date", "")
 
-        # ⬇️ intent 기반 분기
+        # ⬇️ intent 기반 분기 처리
         if intent == "register_schedule":
             register_schedule(title, start_date, category)
             create_notion_page(title, start_date, category)
@@ -56,23 +62,29 @@ async def trigger(request: Request):
 
         elif intent == "update_schedule":
             update_schedule(
-                origin_title=parsed.get("origin_title", ""),
-                origin_date=parsed.get("origin_date", ""),
+                origin_title=origin_title,
+                origin_date=origin_date,
                 new_date=start_date,
                 category=category
             )
-            return {"status": "success", "message": f"{parsed.get('origin_date', '')} → {start_date} 일정 수정 완료"}
+            update_notion_schedule(
+                origin_title=origin_title,
+                origin_date=origin_date,
+                new_date=start_date,
+                category=category
+            )
+            return {"status": "success", "message": f"{origin_date} → {start_date} 일정 수정 완료"}
 
         elif intent == "delete_schedule":
             delete_result = delete_schedule(title, start_date, category)
-            return {"status": "success", "message": delete_result}
+            notion_result = delete_from_notion(title, start_date, category)
+            return {"status": "success", "message": f"{delete_result} / {notion_result}"}
 
         else:
             return {"status": "ignored", "message": "처리 가능한 명령이 아닙니다."}
 
     except Exception as e:
         logger.error(f"[trigger] 오류 발생: {str(e)}")
-        # ⛔️ 텔레그램 반복 전송 방지를 위해 반드시 200 OK로 응답
         return JSONResponse(status_code=200, content={
             "status": "error",
             "message": str(e)
