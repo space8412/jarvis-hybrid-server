@@ -7,10 +7,12 @@ logger = logging.getLogger(__name__)
 notion = Client(auth=os.environ["NOTION_TOKEN"])
 database_id = os.environ["NOTION_DATABASE_ID"]
 
+
 def save_to_notion(parsed_data: dict) -> dict:
     try:
         title = parsed_data.get("title")
-        date = parsed_data.get("date")
+        # ✅ start_date 우선 → 없으면 date
+        date = parsed_data.get("start_date") or parsed_data.get("date")
         category = parsed_data.get("category", "기타")
         origin_title = parsed_data.get("origin_title")
         origin_date = parsed_data.get("origin_date")
@@ -19,7 +21,11 @@ def save_to_notion(parsed_data: dict) -> dict:
             raise ValueError("❌ title 또는 date 누락")
 
         if not isinstance(date, datetime):
-            raise ValueError("❌ date는 datetime 객체여야 합니다")
+            from dateutil import parser
+            try:
+                date = parser.parse(date)
+            except Exception as e:
+                raise ValueError(f"❌ 날짜 파싱 실패: {e}")
 
         has_time = date.hour != 0 or date.minute != 0 or date.second != 0
         start_str = date.isoformat()
@@ -40,7 +46,10 @@ def save_to_notion(parsed_data: dict) -> dict:
         if origin_date:
             properties["origin_date"] = {"rich_text": [{"text": {"content": str(origin_date)}}]}
 
-        response = notion.pages.create(parent={"database_id": database_id}, properties=properties)
+        response = notion.pages.create(
+            parent={"database_id": database_id},
+            properties=properties
+        )
         logger.info(f"✅ Notion 등록 성공: {title}")
         return {"status": "success", "title": title, "start": start_str, "category": category}
 
@@ -52,12 +61,18 @@ def save_to_notion(parsed_data: dict) -> dict:
 def delete_from_notion(parsed_data: dict) -> dict:
     try:
         title = parsed_data.get("title")
-        date = parsed_data.get("date")
+        date = parsed_data.get("start_date") or parsed_data.get("date")
 
         if not title or not date:
             raise ValueError("❌ 삭제를 위해 title과 date가 필요합니다.")
 
-        # 검색 쿼리 (title 포함 조건)
+        if not isinstance(date, datetime):
+            from dateutil import parser
+            try:
+                date = parser.parse(date)
+            except Exception as e:
+                raise ValueError(f"❌ 날짜 파싱 실패: {e}")
+
         result = notion.databases.query(
             database_id=database_id,
             filter={
