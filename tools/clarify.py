@@ -56,17 +56,19 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
         full_date_match = re.search(date_regex, message)
         if full_date_match:
             result["start_date"] = full_date_match.group(0).strip()
+        else:
+            logger.warning(f"[clarify] 날짜 추출 실패: {message}")
 
-        # title 추출 (날짜 이후 나오는 문장)
+        # title 추출 (날짜 이후 나오는 문장 → 등록해줘, 추가해줘 제거)
         if full_date_match:
             end = full_date_match.end()
             remaining = message[end:]
             result["title"] = (
-                remaining.replace("등록해줘", "")
-                         .replace("추가해줘", "")
-                         .replace("기록해줘", "")
-                         .replace("예정", "")
-                         .strip()
+                remaining.lstrip("에 ").replace("등록해줘", "")
+                        .replace("추가해줘", "")
+                        .replace("기록해줘", "")
+                        .replace("예정", "")
+                        .strip()
             )
 
         logger.debug(f"[clarify] 파싱 결과: {result}")
