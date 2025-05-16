@@ -3,7 +3,7 @@ uvicorn
 httpx  # 외부 API 연동 시 사용
 python-dotenv
 notion-client
-openai
+openai>=1.1.0  # ✅ 최신 openai SDK 사용 (ChatCompletion → client.chat 방식)
 
 google-api-python-client
 google-auth
