@@ -70,13 +70,26 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
                 }
             )
 
-            # ✅ 2차: GPT 보정 시도
+            # ✅ 2차: GPT 보정 시도 → dateparser로 후속 처리
             if not parsed_date:
                 logger.warning(f"[clarify] dateparser 실패 → GPT 보정 시도: {date_str}")
                 try:
                     gpt_result = gpt_date_fallback(date_str)
-                    parsed_date = datetime.fromisoformat(gpt_result)
-                    logger.info(f"[clarify] GPT 보정 성공 → {parsed_date.isoformat()}")
+                    parsed_date = dateparser.parse(
+                        gpt_result,
+                        languages=["ko"],
+                        settings={
+                            "PREFER_DATES_FROM": "future",
+                            "RELATIVE_BASE": datetime.now(),
+                            "TIMEZONE": "Asia/Seoul",
+                            "RETURN_AS_TIMEZONE_AWARE": False,
+                            "NORMALIZE": True
+                        }
+                    )
+                    if parsed_date:
+                        logger.info(f"[clarify] GPT 보정 성공 → {parsed_date.isoformat()}")
+                    else:
+                        logger.warning(f"[clarify] GPT 보정 후에도 파싱 실패")
                 except Exception:
                     logger.warning(f"[clarify] GPT 보정 실패")
 
