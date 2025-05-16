@@ -59,7 +59,6 @@ def save_to_notion(parsed_data: dict) -> dict:
 
 def delete_from_notion(parsed_data: dict) -> dict:
     try:
-        # ✅ origin 기준 삭제
         title = parsed_data.get("origin_title") or parsed_data.get("title")
         date = parsed_data.get("origin_date") or parsed_data.get("start_date") or parsed_data.get("date")
 
@@ -72,6 +71,9 @@ def delete_from_notion(parsed_data: dict) -> dict:
                 date = parser.parse(date)
             except Exception as e:
                 raise ValueError(f"❌ 날짜 파싱 실패: {e}")
+
+        # ✅ 시간 제거한 날짜 문자열로 정확 비교
+        date_str = date.date().isoformat()
 
         result = notion.databases.query(
             database_id=database_id,
@@ -86,7 +88,7 @@ def delete_from_notion(parsed_data: dict) -> dict:
                     {
                         "property": "날짜",
                         "date": {
-                            "equals": date.isoformat()
+                            "equals": date_str
                         }
                     }
                 ]
@@ -95,7 +97,7 @@ def delete_from_notion(parsed_data: dict) -> dict:
 
         results = result.get("results", [])
         if not results:
-            return {"status": "not_found", "message": f"일정 찾을 수 없음: {title} - {date}"}
+            return {"status": "not_found", "message": f"일정 찾을 수 없음: {title} - {date_str}"}
 
         for page in results:
             notion.pages.update(page["id"], archived=True)
