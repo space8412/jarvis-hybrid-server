@@ -2,7 +2,7 @@ import re
 from typing import Dict, Optional
 import logging
 from datetime import datetime
-import dateparser  # ✅ 추가됨
+import dateparser  # ✅ 추가
 
 logger = logging.getLogger(__name__)
 
@@ -12,16 +12,16 @@ UPDATE_KEYWORDS = ["수정", "변경", "바꿔", "미뤄", "조정", "업데이�
 
 CATEGORY_KEYWORDS = ["회의", "미팅", "약속", "상담", "콘텐츠", "개인", "시공", "공사"]
 
-# ✅ 날짜 정규식 (뒤에 '에'까지 허용 + '시 반'까지 포함)
+# 날짜 표현 정규식
 DATE_PATTERNS = [
-    r"\d{1,2}월\s*\d{1,2}일\s*(오전|오후)?\s*\d{1,2}시(\s*반)?(\s*에)?",
+    r"\d{1,2}월\s*\d{1,2}일\s*(오전|오후)?\s*\d{1,2}시",
     r"\d{1,2}월\s*\d{1,2}일",
     r"오늘", r"내일", r"모레", r"다음주\s*[월화수목금토일]요일"
 ]
 
 def clarify_command(message: str) -> Dict[str, Optional[str]]:
     """
-    메시지에서 title, date, category, intent 등을 추출합니다.
+    명령어에서 title, date, category, intent 등을 추출합니다.
     """
     result = {
         "title": "",
@@ -53,14 +53,17 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
                 result["category"] = keyword
                 break
 
-        # ✅ 날짜 추출 및 파싱
+        # ✅ 날짜 추출
         date_regex = "|".join(DATE_PATTERNS)
         full_date_match = re.search(date_regex, message)
 
         if full_date_match:
             date_str = full_date_match.group(0).strip()
 
-            # ✅ dateparser로 날짜 해석
+            # ✅ 한국어 → 영어 시간 표현 보정
+            date_str = date_str.replace("오전", "AM").replace("오후", "PM")
+
+            # ✅ dateparser로 파싱
             parsed_date = dateparser.parse(
                 date_str,
                 languages=["ko"],
@@ -68,7 +71,8 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
                     "PREFER_DATES_FROM": "future",
                     "RELATIVE_BASE": datetime.now(),
                     "TIMEZONE": "Asia/Seoul",
-                    "RETURN_AS_TIMEZONE_AWARE": False
+                    "RETURN_AS_TIMEZONE_AWARE": False,
+                    "NORMALIZE": True
                 }
             )
 
@@ -83,14 +87,15 @@ def clarify_command(message: str) -> Dict[str, Optional[str]]:
         if full_date_match:
             end = full_date_match.end()
             remaining = message[end:].strip()
+            title_candidate = remaining
 
-            # 명령어 제거
             for cmd in ["등록해줘", "추가해줘", "기록해줘", "예정"]:
-                remaining = remaining.replace(cmd, "")
-            if remaining.startswith("에 "):
-                remaining = remaining[2:]
+                title_candidate = title_candidate.replace(cmd, "")
 
-            result["title"] = remaining.strip()
+            if title_candidate.startswith("에 "):
+                title_candidate = title_candidate[2:]
+
+            result["title"] = title_candidate.strip()
 
         logger.debug(f"[clarify] 파싱 결과: {result}")
         return result
