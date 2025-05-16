@@ -7,7 +7,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request  # 🔹 추가
 
-from tools.notion_writer import create_notion_page
+from tools.notion_writer import save_to_notion  # ✅ 수정된 import
 
 logger = logging.getLogger(__name__)
 
@@ -39,13 +39,13 @@ def register_schedule(title: str, start_date: str, category: str):
     """
     제목, 날짜, 카테고리를 받아 구글 캘린더에 일정을 등록하고 Notion에 기록합니다.
     :param title: 일정 제목
-    :param start_date: 시작 날짜 (예: "5월 18일 오후 2시")
+    :param start_date: 시작 날짜 (예: "2025-05-18T14:00:00")
     :param category: 일정 카테고리
     """
     try:
         # ✅ 날짜 문자열 파싱 → datetime 객체
         try:
-            parsed_dt = parser.parse(start_date, fuzzy=True)
+            parsed_dt = parser.parse(start_date)
         except Exception as e:
             logger.error(f"❌ 날짜 파싱 실패: {start_date} - {e}")
             raise ValueError(f"날짜 형식이 잘못되었습니다: {start_date}")
@@ -92,8 +92,14 @@ def register_schedule(title: str, start_date: str, category: str):
         logger.info(f"✅ Google Calendar 일정 등록 완료 (ID: {event['id']})")
 
         # ✅ Notion에도 동일 일정 기록
-        notion_date = parsed_dt.strftime("%Y-%m-%d")
-        create_notion_page(title, notion_date, category)
+        save_to_notion({
+            "title": title,
+            "start_date": start_date,
+            "category": category,
+            "intent": "register_schedule",
+            "origin_title": "",
+            "origin_date": ""
+        })
 
     except Exception as e:
         logger.error(
