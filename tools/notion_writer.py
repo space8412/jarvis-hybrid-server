@@ -72,8 +72,8 @@ def delete_from_notion(parsed_data: dict) -> dict:
             except Exception as e:
                 raise ValueError(f"❌ 날짜 파싱 실패: {e}")
 
-        # ✅ 시간 제거한 날짜 문자열로 정확 비교
-        date_str = date.date().isoformat()
+        # ✅ 시간 포함된 정확 일치 비교
+        date_str = date.isoformat()
 
         result = notion.databases.query(
             database_id=database_id,
