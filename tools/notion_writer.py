@@ -11,7 +11,6 @@ database_id = os.environ["NOTION_DATABASE_ID"]
 def save_to_notion(parsed_data: dict) -> dict:
     try:
         title = parsed_data.get("title")
-        # ✅ start_date 우선 → 없으면 date
         date = parsed_data.get("start_date") or parsed_data.get("date")
         category = parsed_data.get("category", "기타")
         origin_title = parsed_data.get("origin_title")
@@ -31,14 +30,14 @@ def save_to_notion(parsed_data: dict) -> dict:
         start_str = date.isoformat()
 
         properties = {
-            "Name": {"title": [{"text": {"content": title}}]},
-            "Date": {
+            "일정 제목": {"title": [{"text": {"content": title}}]},
+            "날짜": {
                 "date": {
                     "start": start_str,
                     "time_zone": "Asia/Seoul" if has_time else None
                 }
             },
-            "Category": {"select": {"name": category}}
+            "유형": {"select": {"name": category}}
         }
 
         if origin_title:
@@ -78,13 +77,13 @@ def delete_from_notion(parsed_data: dict) -> dict:
             filter={
                 "and": [
                     {
-                        "property": "Name",
+                        "property": "일정 제목",
                         "title": {
                             "contains": title
                         }
                     },
                     {
-                        "property": "Date",
+                        "property": "날짜",
                         "date": {
                             "equals": date.date().isoformat()
                         }
