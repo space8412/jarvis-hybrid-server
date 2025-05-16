@@ -1,7 +1,8 @@
 import os
 import logging
 from typing import Union, Dict, Any
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
 from tools.telegram_parser import setup_telegram_app
@@ -51,10 +52,7 @@ async def trigger(request: Request):
         if intent == "register_schedule":
             register_schedule(title, start_date, category)
             create_notion_page(title, start_date, category)
-            return {
-                "status": "success",
-                "message": f"{start_date} 일정 등록 완료"
-            }
+            return {"status": "success", "message": f"{start_date} 일정 등록 완료"}
 
         elif intent == "update_schedule":
             update_schedule(
@@ -63,27 +61,22 @@ async def trigger(request: Request):
                 new_date=start_date,
                 category=category
             )
-            return {
-                "status": "success",
-                "message": f"{parsed.get('origin_date', '')} → {start_date} 일정 수정 완료"
-            }
+            return {"status": "success", "message": f"{parsed.get('origin_date', '')} → {start_date} 일정 수정 완료"}
 
         elif intent == "delete_schedule":
             delete_result = delete_schedule(title, start_date, category)
-            return {
-                "status": "success",
-                "message": delete_result
-            }
+            return {"status": "success", "message": delete_result}
 
         else:
-            return {
-                "status": "ignored",
-                "message": "처리 가능한 명령이 아닙니다."
-            }
+            return {"status": "ignored", "message": "처리 가능한 명령이 아닙니다."}
 
     except Exception as e:
         logger.error(f"[trigger] 오류 발생: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # ⛔️ 텔레그램 반복 전송 방지를 위해 반드시 200 OK로 응답
+        return JSONResponse(status_code=200, content={
+            "status": "error",
+            "message": str(e)
+        })
 
 
 # ✅ clarify 단독 테스트용 엔드포인트
@@ -97,4 +90,4 @@ async def clarify_test(request: Request):
 
     except Exception as e:
         logger.error(f"[clarify] 테스트 오류 발생: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(status_code=500, content={"detail": str(e)})
