@@ -21,7 +21,6 @@ def ensure_kst_timezone(date_str: str) -> str:
 def create_notion_page(title: str, date: str, category: str):
     try:
         date_iso = ensure_kst_timezone(date)
-        date_short = date_iso[:10]  # 날짜만 비교
 
         # 제목 기준으로 먼저 검색 후 수동 필터링
         query = notion.databases.query(
@@ -33,7 +32,7 @@ def create_notion_page(title: str, date: str, category: str):
             date_val = page["properties"]["날짜"]["date"].get("start")
             category_val = page["properties"]["유형"]["select"].get("name")
 
-            if date_val and date_val[:10] == date_short and category_val == category:
+            if date_val == date_iso and category_val == category:
                 logger.info(f"⚠️ 이미 등록된 일정입니다. (제목: {title}, 날짜: {date_iso}, 카테고리: {category}) → 등록 생략")
                 return
 
@@ -55,7 +54,6 @@ def create_notion_page(title: str, date: str, category: str):
 def delete_from_notion(title: str, date: str, category: str) -> str:
     try:
         date_iso = ensure_kst_timezone(date)
-        date_short = date_iso[:10]
 
         query = notion.databases.query(
             database_id=database_id,
@@ -67,7 +65,7 @@ def delete_from_notion(title: str, date: str, category: str) -> str:
             date_val = page["properties"]["날짜"]["date"].get("start")
             category_val = page["properties"]["유형"]["select"].get("name")
 
-            if date_val and date_val[:10] == date_short and category_val == category:
+            if date_val == date_iso and category_val == category:
                 notion.pages.update(page["id"], archived=True)
                 deleted = True
 
@@ -85,7 +83,6 @@ def update_notion_schedule(origin_title: str, origin_date: str, new_date: str, c
     try:
         date_old = ensure_kst_timezone(origin_date)
         date_new = ensure_kst_timezone(new_date)
-        date_old_short = date_old[:10]
 
         query = notion.databases.query(
             database_id=database_id,
@@ -97,7 +94,7 @@ def update_notion_schedule(origin_title: str, origin_date: str, new_date: str, c
             date_val = page["properties"]["날짜"]["date"].get("start")
             category_val = page["properties"]["유형"]["select"].get("name")
 
-            if date_val and date_val[:10] == date_old_short and category_val == category:
+            if date_val == date_old and category_val == category:
                 notion.pages.update(
                     page["id"],
                     properties={"날짜": {"date": {"start": date_new}}}
