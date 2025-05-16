@@ -9,25 +9,38 @@ notion = Client(auth=os.environ["NOTION_TOKEN"])
 def create_notion_page(title: str, date: str, category: str):
     """
     Notion 데이터베이스에 새로운 페이지를 생성합니다.
-    
-    :param title: 일정 제목
-    :param date: 일정 날짜 (ISO 또는 YYYY-MM-DD 형식 허용)
-    :param category: 일정 카테고리 (Notion select 옵션과 일치해야 함)
+    중복 일정(title + date + category)이 있으면 생략합니다.
     """
     try:
-        # ✅ ISO 형식인 경우에도 YYYY-MM-DD로 변환
+        # ✅ ISO 형식 → YYYY-MM-DD 로 보정
         try:
             date_only = date[:10]  # 예: 2025-05-18T14:00:00 → 2025-05-18
             datetime.strptime(date_only, "%Y-%m-%d")
         except ValueError:
             raise ValueError(f"❌ 날짜 형식 오류: {date} → 'YYYY-MM-DD' 형식이어야 합니다.")
 
+        # ✅ 중복 일정 확인
+        query = notion.databases.query(
+            database_id=os.environ["NOTION_DATABASE_ID"],
+            filter={
+                "and": [
+                    {"property": "일정 제목", "rich_text": {"equals": title}},
+                    {"property": "날짜", "date": {"equals": date_only}},
+                    {"property": "유형", "select": {"equals": category}},
+                ]
+            }
+        )
+
+        if query.get("results"):
+            logger.info(f"⚠️ 이미 등록된 일정입니다. (제목: {title}, 날짜: {date_only}, 카테고리: {category}) → 등록 생략")
+            return
+
         # ✅ Notion 페이지 생성 요청
         new_page = {
             "parent": {"database_id": os.environ["NOTION_DATABASE_ID"]},
             "properties": {
                 "일정 제목": {"title": [{"text": {"content": title}}]},
-                "날짜": {"date": {"start": date_only}},  # ⬅️ 잘린 날짜 사용
+                "날짜": {"date": {"start": date_only}},
                 "유형": {"select": {"name": category}},
             },
         }
