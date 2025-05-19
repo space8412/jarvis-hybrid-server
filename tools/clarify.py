@@ -2,14 +2,13 @@ import re
 import json
 import os
 from typing import Optional, Dict
-from openai import OpenAI  # ✅ 변경된 import
+from openai import OpenAI
 
 # ✅ 클라이언트 객체 생성
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def clarify_command(command: str) -> Dict[str, Optional[str]]:
     def extract_command_details(command: str) -> Dict[str, Optional[str]]:
-        # 정규식을 사용하여 title, start_date, origin_date, intent, category, origin_title 추출 시도
         title_pattern = r'title:\s*(.+?)\s*(?:,|$)'
         start_date_pattern = r'start_date:\s*(\d{4}-\d{2}-\d{2})'
         origin_date_pattern = r'origin_date:\s*(\d{4}-\d{2}-\d{2})'
@@ -33,12 +32,10 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
             'origin_title': origin_title_match.group(1) if origin_title_match else None
         }
 
-        # intent가 register_schedule이면 origin_title과 origin_date는 None으로 고정
         if result['intent'] == 'register_schedule':
             result['origin_title'] = None
             result['origin_date'] = None
 
-        # 정규식으로 추출에 실패한 경우, GPT 보정 로직 사용
         if not all(result.values()):
             result = gpt_correction(command)
 
@@ -46,6 +43,9 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
 
     def gpt_correction(command: str) -> Dict[str, Optional[str]]:
         today = "2025-05-19"  # 기준일 고정
+        tomorrow = "2025-05-20"
+        day_after_tomorrow = "2025-05-21"
+
         prompt = f"""
 오늘 날짜는 {today}야.
 너는 일정관리 AI야.
@@ -65,6 +65,13 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
 - 개인
 - 현장방문
 - 기타
+
+📌 날짜 해석 규칙 (매우 중요):
+- 오늘은 {today}
+- "내일"은 {tomorrow}
+- "모레", "내일모레"는 {day_after_tomorrow}
+- "어제", "그제"도 오늘을 기준으로 정확히 해석해
+- 절대 '내일모레 = 3일 후'처럼 해석하지 마
 
 ❗ 주의사항:
 - "수정", "변경", "바꿔" 등이 포함된 문장은 intent가 "update_schedule"이야.
@@ -87,9 +94,7 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
 
         response = client.chat.completions.create(
             model="gpt-4",
-            messages=[
-                {"role": "user", "content": prompt.strip()}
-            ],
+            messages=[{"role": "user", "content": prompt.strip()}],
             temperature=0
         )
 
@@ -106,15 +111,12 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
                 'origin_title': None
             }
 
-        # title 최대 20자 제한
         if result['title']:
             result['title'] = result['title'][:20]
 
-        # category 기본값 보정
         if not result['category']:
             result['category'] = '기타'
 
-        # intent가 등록이면 origin_값 제거
         if result['intent'] == 'register_schedule':
             result['origin_title'] = None
             result['origin_date'] = None
