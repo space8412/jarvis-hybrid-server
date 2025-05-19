@@ -1,10 +1,11 @@
 import re
-import openai
 import json
 import os
 from typing import Optional, Dict
+from openai import OpenAI  # ✅ 변경된 import
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# ✅ 클라이언트 객체 생성
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def clarify_command(command: str) -> Dict[str, Optional[str]]:
     def extract_command_details(command: str) -> Dict[str, Optional[str]]:
@@ -49,9 +50,9 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
 다음 명령어에서 title, start_date, origin_date, intent, category, origin_title 값을 추출해서 반드시 아래 JSON 형식 그대로 출력해줘.
 
 📌 intent 값은 반드시 아래 중 하나로만 써야 해:
-- \"register_schedule\"
-- \"update_schedule\"
-- \"delete_schedule\"
+- "register_schedule"
+- "update_schedule"
+- "delete_schedule"
 
 기준 시점은 2025년 한국 시간 (Asia/Seoul)이고, 과거 날짜도 그대로 사용해.
 
@@ -60,16 +61,16 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
 
 반드시 아래 형식처럼 JSON만 출력해:
 {{
-  \"title\": \"...\",
-  \"start_date\": \"...\",
-  \"origin_date\": \"...\",
-  \"intent\": \"...\",
-  \"category\": \"...\",
-  \"origin_title\": \"...\"
+  "title": "...",
+  "start_date": "...",
+  "origin_date": "...",
+  "intent": "...",
+  "category": "...",
+  "origin_title": "..."
 }}
         """
-        
-        response = openai.ChatCompletion.create(
+
+        response = client.chat.completions.create(  # ✅ 수정된 호출 방식
             model="gpt-4",
             messages=[
                 {"role": "user", "content": prompt.strip()}
