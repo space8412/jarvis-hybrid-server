@@ -1,6 +1,8 @@
 import os
+import json
 import logging
 from typing import Union, Dict, Any
+from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
@@ -62,7 +64,6 @@ async def trigger(request: Request):
                 calendar_result = f"❌ 캘린더 등록 실패: {e}"
 
             try:
-                # ✅ Notion 등록은 여기서 단 한 번만 실행
                 notion_result = save_to_notion(parsed)
             except Exception as e:
                 notion_result = f"❌ Notion 등록 실패: {e}"
@@ -86,7 +87,7 @@ async def trigger(request: Request):
                 calendar_result = f"❌ 캘린더 삭제 실패: {e}"
 
             try:
-                notion_result = delete_from_notion(parsed)  # ✅ dict 전달 방식으로 수정
+                notion_result = delete_from_notion(parsed)
             except Exception as e:
                 notion_result = f"❌ Notion 삭제 실패: {e}"
 
