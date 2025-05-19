@@ -17,9 +17,9 @@ from tools.calendar_update import update_schedule
 from tools.calendar_delete import delete_schedule
 from tools.notion_writer import (
     save_to_notion,
-    delete_from_notion,
-    update_notion_schedule
+    delete_from_notion
 )
+from tools.update_notion_schedule import update_notion_schedule  # ✅ 수정된 import
 
 # ✅ 환경변수 로드 및 설정
 load_dotenv()
@@ -165,9 +165,9 @@ async def agent(request: Request):
 명령어를 분석해서 intent, title, start_date, origin_date, category, origin_title 값을 아래 형식의 JSON으로 반환해줘.
 
 📌 intent 값은 아래 중 하나로만:
-- \"register_schedule\"
-- \"update_schedule\"
-- \"delete_schedule\"
+- "register_schedule"
+- "update_schedule"
+- "delete_schedule"
 
 📌 category 값은 반드시 아래 중 하나로 한글로만 써줘:
 - 회의
@@ -183,12 +183,12 @@ async def agent(request: Request):
 
 형식:
 {{
-  \"title\": \"...\",
-  \"start_date\": \"...\",
-  \"origin_date\": \"...\",
-  \"intent\": \"...\",
-  \"category\": \"...\",
-  \"origin_title\": \"...\"
+  "title": "...",
+  "start_date": "...",
+  "origin_date": "...",
+  "intent": "...",
+  "category": "...",
+  "origin_title": "..."
 }}"""
 
         response = client.chat.completions.create(
