@@ -1,13 +1,15 @@
 import os
 import json
 import logging
+import traceback
+import requests
 from typing import Union, Dict, Any
 from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
+from openai import OpenAI
 
-from tools.telegram_parser import setup_telegram_app
 from tools.clarify import clarify_command
 from tools.calendar_register import register_schedule
 from tools.calendar_update import update_schedule
@@ -18,23 +20,24 @@ from tools.notion_writer import (
     update_notion_schedule
 )
 
-# ✅ .env 환경변수 로드
+# ✅ 환경변수 로드 및 설정
 load_dotenv()
-
-# ✅ 로그 설정
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=getattr(logging, log_level))
 logger = logging.getLogger(__name__)
 
-# ✅ 필수 환경변수 확인
 REQUIRED_ENV_VARS = ["OPENAI_API_KEY", "NOTION_TOKEN", "NOTION_DATABASE_ID"]
 for var in REQUIRED_ENV_VARS:
     if not os.getenv(var):
         raise RuntimeError(f"❌ 환경변수 {var}가 설정되지 않았습니다.")
 
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 # ✅ FastAPI 앱 초기화
 app = FastAPI()
 
+# ✅ intent 분기 처리
 @app.post("/trigger")
 async def trigger(request: Request):
     try:
@@ -107,6 +110,7 @@ async def trigger(request: Request):
             "message": str(e)
         })
 
+# ✅ 명령어 파싱 테스트용
 @app.post("/clarify")
 async def clarify_test(request: Request):
     try:
@@ -118,3 +122,61 @@ async def clarify_test(request: Request):
     except Exception as e:
         logger.error(f"[clarify] 테스트 오류 발생: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": str(e)})
+
+# ✅ GPT 기반 명령어 구조화 (릴스, 블로그 등 확장 가능)
+@app.post("/agent")
+async def agent(request: Request):
+    try:
+        body = await request.json()
+        text = body.get("text", "")
+
+        if not text:
+            return {"error": "text 필드가 비어 있습니다."}
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        prompt = f"""오늘 날짜는 {today}야.
+명령어를 분석해서 intent, title, start_date, origin_date, category, origin_title 값을 아래 형식의 JSON으로 반환해줘.
+
+📌 intent 값은 아래 중 하나로만:
+- "register_schedule"
+- "update_schedule"
+- "delete_schedule"
+
+📌 category 값은 반드시 아래 중 하나로 한글로만 써줘:
+- 회의
+- 상담
+- 시공
+- 공사
+- 콘텐츠
+- 개인
+- 현장방문
+- 기타
+
+명령어: {text}
+
+형식:
+{{
+  "title": "...",
+  "start_date": "...",
+  "origin_date": "...",
+  "intent": "...",
+  "category": "...",
+  "origin_title": "..."
+}}
+"""
+
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt.strip()}],
+            temperature=0
+        )
+
+        parsed = json.loads(response.choices[0].message.content.strip())
+        return parsed
+
+    except Exception as e:
+        logger.error(f"[agent] 오류 발생: {str(e)}")
+        return JSONResponse(status_code=500, content={
+            "error": str(e),
+            "trace": traceback.format_exc()
+        })
