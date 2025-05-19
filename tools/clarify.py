@@ -1,15 +1,14 @@
 import re
-import os
 import json
-import logging
 from typing import Optional, Dict
 from openai import OpenAI
+import os
 
-logger = logging.getLogger(__name__)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def clarify_command(command: str) -> Dict[str, Optional[str]]:
     def extract_command_details(command: str) -> Dict[str, Optional[str]]:
+        # 정규식을 사용하여 필드 추출
         title_pattern = r'title:\s*(.+?)\s*(?:,|$)'
         start_date_pattern = r'start_date:\s*(\d{4}-\d{2}-\d{2})'
         origin_date_pattern = r'origin_date:\s*(\d{4}-\d{2}-\d{2})'
@@ -33,35 +32,37 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
             'origin_title': origin_title_match.group(1) if origin_title_match else None
         }
 
+        # register는 origin_* 제거
         if result['intent'] == 'register_schedule':
             result['origin_title'] = None
             result['origin_date'] = None
 
+        # 누락된 항목이 있는 경우 GPT 보정
         if not all(result.values()):
             result = gpt_correction(command)
 
         return result
 
     def gpt_correction(command: str) -> Dict[str, Optional[str]]:
-        prompt = (
-            f"다음 명령문에서 title, start_date, origin_date, intent, category, origin_title 값을 추출해서 "
-            f"JSON 형식으로 반환해줘:\n\n"
-            f"{command}\n\n"
-            f"출력 예시: {{\"title\": \"후암동 회의\", \"start_date\": \"2025-05-23T14:00:00\", "
-            f"\"origin_date\": \"2025-05-20T14:00:00\", \"intent\": \"update_schedule\", "
-            f"\"category\": \"회의\", \"origin_title\": \"후암동 회의\"}}"
+        prompt = f"""다음 명령어에서 title, start_date, origin_date, intent, category, origin_title을 추출해서 JSON 형식으로 보여줘.
+
+명령어:
+{command}
+
+JSON 형식 예:
+{{"title": "후암동 회의", "start_date": "2025-05-23T14:00:00", "origin_date": "2025-05-23T13:00:00", "intent": "update_schedule", "category": "회의", "origin_title": "후암동 회의"}}"""
+
+        response = client.chat.completions.create(
+            model="gpt-4",
+            temperature=0,
+            messages=[{"role": "user", "content": prompt}]
         )
 
+        gpt_result = response.choices[0].message.content.strip()
+
         try:
-            response = client.chat.completions.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0,
-            )
-            gpt_result = response.choices[0].message.content.strip()
             result = json.loads(gpt_result)
-        except Exception as e:
-            logger.error(f"[clarify] GPT 호출 또는 JSON 파싱 오류: {e}")
+        except json.JSONDecodeError:
             result = {
                 'title': None,
                 'start_date': None,
@@ -71,17 +72,16 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
                 'origin_title': None
             }
 
-        if result.get("title"):
-            result["title"] = result["title"][:20]
+        if result['title']:
+            result['title'] = result['title'][:20]
 
-        if not result.get("category"):
-            result["category"] = "기타"
+        if not result.get('category'):
+            result['category'] = '기타'
 
-        if result.get("intent") == "register_schedule":
-            result["origin_title"] = None
-            result["origin_date"] = None
+        if result.get('intent') == 'register_schedule':
+            result['origin_title'] = None
+            result['origin_date'] = None
 
-        logger.info(f"[clarify] GPT 보정 최종 적용 → {result}")
         return result
 
     return extract_command_details(command)
