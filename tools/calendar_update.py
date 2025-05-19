@@ -47,12 +47,10 @@ def update_calendar_event(calendar_service, event_id, event_body):
 # ✅ 메인 함수
 def update_schedule(origin_title: str, origin_date: str, new_date: str, category: str):
     try:
-        # ✅ origin_date 값 검증
         if not origin_date:
             logger.error("❌ origin_date 값이 비어 있습니다. 기존 일정을 찾을 수 없습니다.")
             return {"status": "fail", "reason": "origin_date missing"}
 
-        # ✅ 날짜 파싱
         origin_day = datetime.fromisoformat(origin_date).date()
         new_datetime = datetime.fromisoformat(new_date)
 
@@ -81,7 +79,6 @@ def update_schedule(origin_title: str, origin_date: str, new_date: str, category
 
         event_id = target_event["id"]
 
-        # ✅ 시간 포함 일정
         if "dateTime" in target_event["start"]:
             old_start = datetime.fromisoformat(target_event["start"]["dateTime"])
             old_end = datetime.fromisoformat(target_event["end"]["dateTime"])
@@ -94,6 +91,7 @@ def update_schedule(origin_title: str, origin_date: str, new_date: str, category
             new_end = new_start + duration
 
             event_body = {
+                "summary": f"[{category}] {origin_title}",
                 "start": {
                     "dateTime": new_start.isoformat(),
                     "timeZone": "Asia/Seoul"
@@ -111,9 +109,9 @@ def update_schedule(origin_title: str, origin_date: str, new_date: str, category
                 }
             }
 
-        # ✅ 종일 일정
         else:
             event_body = {
+                "summary": f"[{category}] {origin_title}",
                 "start": {"date": new_datetime.date().isoformat()},
                 "end": {"date": new_datetime.date().isoformat()},
                 "reminders": {
