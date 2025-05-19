@@ -36,7 +36,12 @@ def normalize_title(text: str) -> str:
 # ✅ 일정 삭제 함수
 def delete_schedule(title: str, start_date: str, category: str) -> str:
     try:
-        # ✅ ISO 8601 형식 지원
+        # ✅ 날짜 검증
+        if not start_date:
+            logger.error("❌ start_date가 비어 있어 삭제를 수행할 수 없습니다.")
+            return "삭제 실패: start_date가 없습니다."
+
+        # ✅ ISO 8601 → 날짜만 파싱
         parsed_datetime = datetime.fromisoformat(start_date)
         date_str = parsed_datetime.strftime("%Y-%m-%d")
         time_min = f"{date_str}T00:00:00+09:00"
@@ -53,6 +58,7 @@ def delete_schedule(title: str, start_date: str, category: str) -> str:
 
         events = events_result.get("items", [])
         if not events:
+            logger.warning(f"⚠️ {date_str}에는 등록된 일정이 없습니다.")
             return f"{date_str}에는 등록된 일정이 없습니다."
 
         expected = normalize_title(f"[{category}] {title}")
@@ -68,10 +74,12 @@ def delete_schedule(title: str, start_date: str, category: str) -> str:
                 deleted_count += 1
 
         if deleted_count == 0:
+            logger.info(f"⚠️ '{expected}' 일정이 {date_str}에 존재하지 않습니다.")
             return f"{date_str}에는 '{title}' 일정이 없습니다."
         else:
+            logger.info(f"✅ 일정 삭제 완료: {deleted_count}건 삭제됨")
             return f"{date_str} '{title}' 일정 {deleted_count}건 삭제 완료."
 
     except Exception as e:
         logger.error(f"❌ 일정 삭제 중 오류: {str(e)}")
-        raise
+        return f"일정 삭제 중 오류 발생: {str(e)}"
