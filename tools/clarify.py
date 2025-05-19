@@ -78,11 +78,15 @@ def clarify_command(text: str) -> Dict:
         logger.error(f"[clarify] GPT 보정 실패: {e}")
         start_date = ""
 
-    # ✅ 최종 title은 GPT 보정으로 무조건 보완
+    # ✅ GPT 기반 title 보정 (날짜/시간 제거하고 장소+용도만)
     try:
-        title_prompt = f"'{text}'라는 문장에서 등록하려는 일정의 제목만 10자 이내로 추출해줘. 예: '후암동 회의'"
+        title_prompt = (
+            f"'{text}'라는 문장에서 날짜나 시간 표현은 모두 제거하고, "
+            f"장소와 용도만 포함된 일정 제목을 한 줄로 추출해줘. "
+            f"예: '후암동 회의', '사무실 미팅', '고객 상담'. 결과는 제목만 출력해줘."
+        )
         title = gpt_extract(title_prompt)
-        logger.info(f"[clarify] GPT title 보정 성공 → {title}")
+        logger.info(f"[clarify] GPT title 보정 최종 적용 → {title}")
     except Exception as e:
         logger.error(f"[clarify] GPT title 보정 실패: {e}")
         title = origin_title or ""
