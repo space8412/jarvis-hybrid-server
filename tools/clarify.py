@@ -2,8 +2,6 @@ import re
 import json
 import os
 from typing import Optional, Dict
-from datetime import datetime
-from dateutil import tz
 from openai import OpenAI  # ✅ 변경된 import
 
 # ✅ 클라이언트 객체 생성
@@ -47,11 +45,9 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
         return result
 
     def gpt_correction(command: str) -> Dict[str, Optional[str]]:
-        # ✅ 오늘 날짜 (한국 시간 기준)
-        today_kst = datetime.now(tz=tz.gettz("Asia/Seoul")).strftime("%Y-%m-%d")
-
+        today = "2025-05-19"  # 기준일 고정
         prompt = f"""
-오늘 날짜는 {today_kst}야.
+오늘 날짜는 {today}야.
 너는 일정관리 AI야.
 다음 명령어에서 title, start_date, origin_date, intent, category, origin_title 값을 추출해서 반드시 아래 JSON 형식 그대로 출력해줘.
 
@@ -70,7 +66,10 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
 - 현장방문
 - 기타
 
-기준 시점은 오늘 날짜 {today_kst}의 한국 시간 (Asia/Seoul)이고, 과거 날짜도 그대로 사용해.
+❗ 주의사항:
+- "수정", "변경", "바꿔" 등이 포함된 문장은 intent가 "update_schedule"이야.
+- 이 경우 "등록된 일정" 앞에 나온 날짜와 제목은 origin_date, origin_title이야.
+- "으로 바꿔줘" 또는 "로 바꿔줘" 뒤에 나온 내용은 새로운 일정이야. → start_date, title
 
 명령어:
 {command}
@@ -84,11 +83,13 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
   "category": "...",
   "origin_title": "..."
 }}
-        """
+"""
 
-        response = client.chat.completions.create(  # ✅ 호출 방식 유지
+        response = client.chat.completions.create(
             model="gpt-4",
-            messages=[{"role": "user", "content": prompt.strip()}],
+            messages=[
+                {"role": "user", "content": prompt.strip()}
+            ],
             temperature=0
         )
 
