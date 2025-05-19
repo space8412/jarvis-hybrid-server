@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from openai import OpenAI
+from tempfile import NamedTemporaryFile
 
 from tools.clarify import clarify_command
 from tools.calendar_register import register_schedule
@@ -43,7 +44,29 @@ async def trigger(request: Request):
     try:
         body = await request.json()
         msg_obj = body.get("message", {})
-        message_text = msg_obj.get("text", "")
+        message_text = ""
+
+        # ✅ 음성 메시지 처리
+        if "voice" in msg_obj:
+            file_id = msg_obj["voice"]["file_id"]
+            file_info = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getFile?file_id={file_id}").json()
+            file_path = file_info["result"]["file_path"]
+            file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_path}"
+            voice_data = requests.get(file_url).content
+
+            with NamedTemporaryFile(delete=False, suffix=".ogg") as tmp_file:
+                tmp_file.write(voice_data)
+                tmp_path = tmp_file.name
+
+            with open(tmp_path, "rb") as audio_file:
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    response_format="text"
+                )
+                message_text = transcript.strip()
+        else:
+            message_text = msg_obj.get("text", "")
 
         if not message_text:
             logger.warning("[trigger] 입력된 메시지가 비어 있습니다.")
@@ -142,9 +165,9 @@ async def agent(request: Request):
 명령어를 분석해서 intent, title, start_date, origin_date, category, origin_title 값을 아래 형식의 JSON으로 반환해줘.
 
 📌 intent 값은 아래 중 하나로만:
-- "register_schedule"
-- "update_schedule"
-- "delete_schedule"
+- \"register_schedule\"
+- \"update_schedule\"
+- \"delete_schedule\"
 
 📌 category 값은 반드시 아래 중 하나로 한글로만 써줘:
 - 회의
@@ -160,12 +183,12 @@ async def agent(request: Request):
 
 형식:
 {{
-  "title": "...",
-  "start_date": "...",
-  "origin_date": "...",
-  "intent": "...",
-  "category": "...",
-  "origin_title": "..."
+  \"title\": \"...\",
+  \"start_date\": \"...\",
+  \"origin_date\": \"...\",
+  \"intent\": \"...\",
+  \"category\": \"...\",
+  \"origin_title\": \"...\"
 }}"""
 
         response = client.chat.completions.create(
