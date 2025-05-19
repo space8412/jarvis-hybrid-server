@@ -5,9 +5,7 @@ from datetime import datetime
 from dateutil import parser
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from google.auth.transport.requests import Request  # 🔹 추가
-
-from tools.notion_writer import save_to_notion  # ✅ 수정된 import
+from google.auth.transport.requests import Request
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +35,7 @@ calendar_service = build("calendar", "v3", credentials=creds)
 
 def register_schedule(title: str, start_date: str, category: str):
     """
-    제목, 날짜, 카테고리를 받아 구글 캘린더에 일정을 등록하고 Notion에 기록합니다.
+    제목, 날짜, 카테고리를 받아 구글 캘린더에 일정을 등록합니다.
     :param title: 일정 제목
     :param start_date: 시작 날짜 (예: "2025-05-18T14:00:00")
     :param category: 일정 카테고리
@@ -90,16 +88,6 @@ def register_schedule(title: str, start_date: str, category: str):
         ).execute()
 
         logger.info(f"✅ Google Calendar 일정 등록 완료 (ID: {event['id']})")
-
-        # ✅ Notion에도 동일 일정 기록
-        save_to_notion({
-            "title": title,
-            "start_date": start_date,
-            "category": category,
-            "intent": "register_schedule",
-            "origin_title": title,
-            "origin_date": start_date
-        })
 
     except Exception as e:
         logger.error(
