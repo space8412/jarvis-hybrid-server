@@ -84,10 +84,8 @@ def update_schedule(origin_title: str, origin_date: str, new_date: str, category
             old_end = datetime.fromisoformat(target_event["end"]["dateTime"])
             duration = old_end - old_start
 
-            new_start = new_datetime.replace(
-                hour=old_start.hour,
-                minute=old_start.minute
-            )
+            # ✅ GPT에서 받은 시간 그대로 반영
+            new_start = new_datetime
             new_end = new_start + duration
 
             event_body = {
