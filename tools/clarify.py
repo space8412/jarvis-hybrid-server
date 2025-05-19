@@ -2,14 +2,14 @@ import re
 import json
 import os
 from typing import Optional, Dict
-from openai import OpenAI  # ✅ 변경된 import
+from openai import OpenAI  # ✅ 최신 SDK
 
-# ✅ 클라이언트 객체 생성
+# ✅ OpenAI 클라이언트 초기화
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def clarify_command(command: str) -> Dict[str, Optional[str]]:
     def extract_command_details(command: str) -> Dict[str, Optional[str]]:
-        # 정규식을 사용하여 title, start_date, origin_date, intent, category, origin_title 추출 시도
+        # 정규식으로 필드 추출 시도
         title_pattern = r'title:\s*(.+?)\s*(?:,|$)'
         start_date_pattern = r'start_date:\s*(\d{4}-\d{2}-\d{2})'
         origin_date_pattern = r'origin_date:\s*(\d{4}-\d{2}-\d{2})'
@@ -33,12 +33,12 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
             'origin_title': origin_title_match.group(1) if origin_title_match else None
         }
 
-        # intent가 register_schedule이면 origin_title과 origin_date는 None으로 고정
+        # 등록 명령어일 경우 origin 필드는 제거
         if result['intent'] == 'register_schedule':
             result['origin_title'] = None
             result['origin_date'] = None
 
-        # 정규식으로 추출에 실패한 경우, GPT 보정 로직 사용
+        # 하나라도 누락된 값이 있으면 GPT로 보정
         if not all(result.values()):
             result = gpt_correction(command)
 
@@ -70,8 +70,8 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
 }}
         """
 
-        response = client.chat.completions.create(  # ✅ 수정된 호출 방식
-            model="gpt-4",
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",  # ✅ 비용 절감용 모델 적용됨
             messages=[
                 {"role": "user", "content": prompt.strip()}
             ],
@@ -91,15 +91,15 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
                 'origin_title': None
             }
 
-        # title 최대 20자 제한
+        # title 길이 제한
         if result['title']:
             result['title'] = result['title'][:20]
 
-        # category 기본값 보정
+        # category 기본값
         if not result['category']:
             result['category'] = '기타'
 
-        # intent가 등록이면 origin_값 제거
+        # 등록 intent 시 origin 값 제거
         if result['intent'] == 'register_schedule':
             result['origin_title'] = None
             result['origin_date'] = None
