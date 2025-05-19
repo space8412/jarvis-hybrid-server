@@ -6,6 +6,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 from tenacity import retry, stop_after_attempt, wait_exponential
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ calendar_service = build("calendar", "v3", credentials=creds)
 
 # ✅ 제목 비교 정규화 함수
 def normalize_title(title: str) -> str:
-    return " ".join(title.lower().strip().replace("[", "").replace("]", "").split())
+    return re.sub(r"\s+", "", title.lower().strip().replace("[", "").replace("]", ""))
 
 # ✅ 일정 수정 API 재시도 래퍼
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
@@ -67,17 +68,20 @@ def update_schedule(origin_title: str, origin_date: str, new_date: str, category
 
         events = events_result.get("items", [])
 
-        # ✅ 다양한 형식으로 요약 비교
+        # ✅ 다양한 형식으로 유사 제목 후보 생성
         expected_variants = [
-            normalize_title(f"[{category}] {origin_title}"),
-            normalize_title(origin_title),
-            normalize_title(f"{origin_title} [{category}]")
+            f"[{category}] {origin_title}",
+            origin_title,
+            f"{origin_title} [{category}]",
+            f"{origin_title} ({category})"
         ]
+        expected_variants = [normalize_title(v) for v in expected_variants]
 
+        # ✅ 유사 제목 매칭 (부분 포함 허용)
         target_event = next(
             (
                 event for event in events
-                if normalize_title(event["summary"]) in expected_variants
+                if any(variant in normalize_title(event.get("summary", "")) for variant in expected_variants)
             ),
             None
         )
