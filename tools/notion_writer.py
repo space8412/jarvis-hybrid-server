@@ -13,8 +13,6 @@ def save_to_notion(parsed_data: dict) -> dict:
         title = parsed_data.get("title")
         date = parsed_data.get("start_date") or parsed_data.get("date")
         category = parsed_data.get("category", "기타")
-        origin_title = parsed_data.get("origin_title")
-        origin_date = parsed_data.get("origin_date")
 
         if not title or not date:
             raise ValueError("❌ title 또는 date 누락")
@@ -40,10 +38,7 @@ def save_to_notion(parsed_data: dict) -> dict:
             "유형": {"select": {"name": category}}
         }
 
-        if origin_title:
-            properties["origin_title"] = {"rich_text": [{"text": {"content": origin_title}}]}
-        if origin_date:
-            properties["origin_date"] = {"rich_text": [{"text": {"content": str(origin_date)}}]}
+        # ✅ 불필요한 origin 필드는 제거됨
 
         response = notion.pages.create(
             parent={"database_id": database_id},
@@ -72,7 +67,7 @@ def delete_from_notion(parsed_data: dict) -> dict:
             except Exception as e:
                 raise ValueError(f"❌ 날짜 파싱 실패: {e}")
 
-        # 날짜 범위 설정 (하루 전체)
+        # ✅ 하루 전체 범위로 비교
         start_of_day = date.replace(hour=0, minute=0, second=0, microsecond=0)
         end_of_day = date.replace(hour=23, minute=59, second=59, microsecond=999999)
 
