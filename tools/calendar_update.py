@@ -47,6 +47,11 @@ def update_calendar_event(calendar_service, event_id, event_body):
 # ✅ 메인 함수
 def update_schedule(origin_title: str, origin_date: str, new_date: str, category: str):
     try:
+        # ✅ origin_date 값 검증
+        if not origin_date:
+            logger.error("❌ origin_date 값이 비어 있습니다. 기존 일정을 찾을 수 없습니다.")
+            return {"status": "fail", "reason": "origin_date missing"}
+
         # ✅ 날짜 파싱
         origin_day = datetime.fromisoformat(origin_date).date()
         new_datetime = datetime.fromisoformat(new_date)
@@ -72,7 +77,7 @@ def update_schedule(origin_title: str, origin_date: str, new_date: str, category
 
         if not target_event:
             logger.warning(f"⚠️ '{origin_title}' 일정({origin_date})을 찾을 수 없습니다.")
-            return
+            return {"status": "fail", "reason": "event not found"}
 
         event_id = target_event["id"]
 
@@ -121,7 +126,8 @@ def update_schedule(origin_title: str, origin_date: str, new_date: str, category
 
         update_calendar_event(calendar_service, event_id, event_body)
         logger.info(f"✅ 일정 수정 완료: '{origin_title}' → {new_date}")
+        return {"status": "success", "event_id": event_id}
 
     except Exception as e:
-        logger.error(f"❌ 일정 수정 중 오류 발생: {str(e)}")
-        raise
+        logger.error(f"❌ 일정 수정 중 오류 발생: {e}")
+        return {"status": "error", "reason": str(e)}
