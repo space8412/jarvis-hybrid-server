@@ -68,7 +68,7 @@ def clarify_command(text: str) -> Dict:
     if title_match:
         origin_title = title_match.group("title").strip()
 
-    # ✅ GPT를 통한 변경 후 날짜 추출
+    # ✅ GPT를 통한 날짜 보정
     start_date = ""
     time_prompt = f"'{text}'라는 문장에서 언급된 날짜/시간을 ISO 8601 형식으로 변환해줘.\n기준: 2025년 한국 시간 (Asia/Seoul), 결과는 예: '2025-05-20T14:00:00'\n결과는 한 줄짜리 ISO 날짜 문자열만 출력해줘. 설명 없이 결과만 줘."
     try:
@@ -78,14 +78,14 @@ def clarify_command(text: str) -> Dict:
         logger.error(f"[clarify] GPT 보정 실패: {e}")
         start_date = ""
 
-    # ✅ GPT 기반 title 보정 (날짜/시간 제거하고 장소+용도만)
+    # ✅ GPT title 보정 → 따옴표 제거까지 처리
     try:
         title_prompt = (
             f"'{text}'라는 문장에서 날짜나 시간 표현은 모두 제거하고, "
             f"장소와 용도만 포함된 일정 제목을 한 줄로 추출해줘. "
             f"예: '후암동 회의', '사무실 미팅', '고객 상담'. 결과는 제목만 출력해줘."
         )
-        title = gpt_extract(title_prompt)
+        title = gpt_extract(title_prompt).strip().strip("'").strip('"')
         logger.info(f"[clarify] GPT title 보정 최종 적용 → {title}")
     except Exception as e:
         logger.error(f"[clarify] GPT title 보정 실패: {e}")
