@@ -2,14 +2,13 @@ import re
 import json
 import os
 from typing import Optional, Dict
-from openai import OpenAI  # ✅ 최신 SDK
+from openai import OpenAI
 
 # ✅ OpenAI 클라이언트 초기화
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def clarify_command(command: str) -> Dict[str, Optional[str]]:
     def extract_command_details(command: str) -> Dict[str, Optional[str]]:
-        # 정규식으로 필드 추출 시도
         title_pattern = r'title:\s*(.+?)\s*(?:,|$)'
         start_date_pattern = r'start_date:\s*(\d{4}-\d{2}-\d{2})'
         origin_date_pattern = r'origin_date:\s*(\d{4}-\d{2}-\d{2})'
@@ -33,12 +32,10 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
             'origin_title': origin_title_match.group(1) if origin_title_match else None
         }
 
-        # 등록 명령어일 경우 origin 필드는 제거
         if result['intent'] == 'register_schedule':
             result['origin_title'] = None
             result['origin_date'] = None
 
-        # 하나라도 누락된 값이 있으면 GPT로 보정
         if not all(result.values()):
             result = gpt_correction(command)
 
@@ -53,6 +50,16 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
 - "register_schedule"
 - "update_schedule"
 - "delete_schedule"
+
+📌 category 값은 반드시 아래 중 하나로 한글로만 써야 해:
+- 회의
+- 상담
+- 시공
+- 공사
+- 콘텐츠
+- 개인
+- 현장방문
+- 기타
 
 기준 시점은 2025년 한국 시간 (Asia/Seoul)이고, 과거 날짜도 그대로 사용해.
 
@@ -71,7 +78,7 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
         """
 
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",  # ✅ 비용 절감용 모델 적용됨
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "user", "content": prompt.strip()}
             ],
@@ -91,15 +98,10 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
                 'origin_title': None
             }
 
-        # title 길이 제한
         if result['title']:
             result['title'] = result['title'][:20]
-
-        # category 기본값
         if not result['category']:
             result['category'] = '기타'
-
-        # 등록 intent 시 origin 값 제거
         if result['intent'] == 'register_schedule':
             result['origin_title'] = None
             result['origin_date'] = None
