@@ -55,20 +55,23 @@ def clarify_command(text: str) -> Dict:
     # ✅ category 판별
     category = classify_category(text)
 
-    # ✅ origin_date (정규식 기반 추출)
+    # ✅ origin_date (정규식 보강 → 다양한 어미 허용)
     origin_date = ""
-    origin_match = re.search(r"(?P<origin_time>\d{1,2}월\s*\d{1,2}일\s*(오전|오후)?\s*\d{1,2}시?)\s*로\s*잡힌", text)
+    origin_match = re.search(
+        r"(?P<origin_time>\d{1,2}월\s*\d{1,2}일\s*(오전|오후)?\s*\d{1,2}시?)\s*로\s*잡힌[\w\s가-힣]*", 
+        text
+    )
     if origin_match:
         origin_time_str = origin_match.group("origin_time")
         origin_date = extract_datetime(origin_time_str) or ""
 
-    # ✅ origin_title (정규식 기반 추출)
+    # ✅ origin_title (기존 유지)
     origin_title = ""
     title_match = re.search(r"잡힌\s*(?P<title>[\w\s가-힣]+?)\s*(을|를)?\s*(3시|수정|변경|바꿔|미뤄|조정|업데이트|앞당겨|늦게)", text)
     if title_match:
         origin_title = title_match.group("title").strip()
 
-    # ✅ GPT를 통한 날짜 보정
+    # ✅ GPT 시간 보정
     start_date = ""
     time_prompt = f"'{text}'라는 문장에서 언급된 날짜/시간을 ISO 8601 형식으로 변환해줘.\n기준: 2025년 한국 시간 (Asia/Seoul), 결과는 예: '2025-05-20T14:00:00'\n결과는 한 줄짜리 ISO 날짜 문자열만 출력해줘. 설명 없이 결과만 줘."
     try:
@@ -78,7 +81,7 @@ def clarify_command(text: str) -> Dict:
         logger.error(f"[clarify] GPT 보정 실패: {e}")
         start_date = ""
 
-    # ✅ GPT title 보정 → 따옴표 제거까지 처리
+    # ✅ GPT title 보정
     try:
         title_prompt = (
             f"'{text}'라는 문장에서 날짜나 시간 표현은 모두 제거하고, "
