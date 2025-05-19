@@ -2,14 +2,13 @@ import re
 import openai
 import json
 import os
-import logging
 from typing import Optional, Dict
 
-logger = logging.getLogger(__name__)
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 def clarify_command(command: str) -> Dict[str, Optional[str]]:
     def extract_command_details(command: str) -> Dict[str, Optional[str]]:
+        # 정규식을 사용하여 title, start_date, origin_date, intent, category, origin_title 추출 시도
         title_pattern = r'title:\s*(.+?)\s*(?:,|$)'
         start_date_pattern = r'start_date:\s*(\d{4}-\d{2}-\d{2})'
         origin_date_pattern = r'origin_date:\s*(\d{4}-\d{2}-\d{2})'
@@ -17,37 +16,29 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
         category_pattern = r'category:\s*(.+?)\s*(?:,|$)'
         origin_title_pattern = r'origin_title:\s*(.+?)\s*(?:,|$)'
 
+        title_match = re.search(title_pattern, command)
+        start_date_match = re.search(start_date_pattern, command)
+        origin_date_match = re.search(origin_date_pattern, command)
+        intent_match = re.search(intent_pattern, command)
+        category_match = re.search(category_pattern, command)
+        origin_title_match = re.search(origin_title_pattern, command)
+
         result = {
-            'title': None,
-            'start_date': None,
-            'origin_date': None,
-            'intent': None,
-            'category': '기타',
-            'origin_title': None
+            'title': title_match.group(1)[:20] if title_match else None,
+            'start_date': start_date_match.group(1) if start_date_match else None,
+            'origin_date': origin_date_match.group(1) if origin_date_match else None,
+            'intent': intent_match.group(1) if intent_match else None,
+            'category': category_match.group(1) if category_match else '기타',
+            'origin_title': origin_title_match.group(1) if origin_title_match else None
         }
 
-        title_match = re.search(title_pattern, command)
-        if title_match:
-            result['title'] = title_match.group(1)[:20]
-
-        for pattern, key in [
-            (start_date_pattern, "start_date"),
-            (origin_date_pattern, "origin_date"),
-            (intent_pattern, "intent"),
-            (category_pattern, "category"),
-            (origin_title_pattern, "origin_title"),
-        ]:
-            match = re.search(pattern, command)
-            if match:
-                result[key] = match.group(1)
-
-        # origin_title/origin_date는 register일 경우 무시
+        # intent가 register_schedule이면 origin_title과 origin_date는 None으로 고정
         if result['intent'] == 'register_schedule':
             result['origin_title'] = None
             result['origin_date'] = None
 
-        # 일부라도 None이면 GPT 보정
-        if not all([result["title"], result["start_date"], result["intent"]]):
+        # 정규식으로 추출에 실패한 경우, GPT 보정 로직 사용
+        if not all(result.values()):
             result = gpt_correction(command)
 
         return result
@@ -57,34 +48,39 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
 너는 일정관리 AI야.
 다음 명령어에서 title, start_date, origin_date, intent, category, origin_title 값을 추출해서 반드시 아래 JSON 형식 그대로 출력해줘.
 
+📌 intent 값은 반드시 아래 중 하나로만 써야 해:
+- \"register_schedule\"
+- \"update_schedule\"
+- \"delete_schedule\"
+
+기준 시점은 2025년 한국 시간 (Asia/Seoul)이고, 과거 날짜도 그대로 사용해.
+
 명령어:
 {command}
 
-결과는 아래 형식처럼 무조건 JSON으로 줘:
+반드시 아래 형식처럼 JSON만 출력해:
 {{
-  "title": "...",
-  "start_date": "...",
-  "origin_date": "...",
-  "intent": "...",
-  "category": "...",
-  "origin_title": "..."
+  \"title\": \"...\",
+  \"start_date\": \"...\",
+  \"origin_date\": \"...\",
+  \"intent\": \"...\",
+  \"category\": \"...\",
+  \"origin_title\": \"...\"
 }}
+        """
+        
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "user", "content": prompt.strip()}
+            ],
+            temperature=0
+        )
 
-설명 없이 JSON만 출력해. 문자열 내에 작은따옴표(')가 아니라 큰따옴표(")를 사용해.
-        """.strip()
-
+        gpt_result = response.choices[0].message.content.strip()
         try:
-            response = openai.chat.completions.create(
-                model="gpt-4",
-                temperature=0,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            gpt_result = response.choices[0].message.content.strip()
-            logger.debug(f"[gpt_correction] raw response: {gpt_result}")
-
             result = json.loads(gpt_result)
-        except Exception as e:
-            logger.error(f"[gpt_correction] GPT 오류: {e}")
+        except json.JSONDecodeError:
             result = {
                 'title': None,
                 'start_date': None,
@@ -94,13 +90,18 @@ def clarify_command(command: str) -> Dict[str, Optional[str]]:
                 'origin_title': None
             }
 
-        if result.get("title"):
-            result["title"] = result["title"][:20]
-        if not result.get("category"):
-            result["category"] = "기타"
-        if result.get("intent") == "register_schedule":
-            result["origin_title"] = None
-            result["origin_date"] = None
+        # title 최대 20자 제한
+        if result['title']:
+            result['title'] = result['title'][:20]
+
+        # category 기본값 보정
+        if not result['category']:
+            result['category'] = '기타'
+
+        # intent가 등록이면 origin_값 제거
+        if result['intent'] == 'register_schedule':
+            result['origin_title'] = None
+            result['origin_date'] = None
 
         return result
 
