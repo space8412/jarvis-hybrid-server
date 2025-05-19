@@ -9,10 +9,10 @@ google-api-python-client
 google-auth
 google-auth-httplib2
 google-auth-oauthlib
-dateparser
 
+dateparser
 python-dateutil
 tenacity>=8.0.1
 
-jamo  # 한글 자모 분석 사용 시만 필요 (clarify.py에서 사용 중이면 유지)
-python-telegram-bot==20.7  # 실제 텔레그램 봇 연동 시만 필요
+jamo  # 한글 자모 분석 시 사용 중일 경우 유지
+python-telegram-bot==20.7  # 텔레그램 연동 필요 시 유지
