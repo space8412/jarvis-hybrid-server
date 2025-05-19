@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil import parser
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -61,7 +61,7 @@ def register_schedule(title: str, start_date: str, category: str):
                 "timeZone": "Asia/Seoul"
             }
             calendar_end = {
-                "dateTime": parsed_dt.isoformat(),
+                "dateTime": (parsed_dt + timedelta(hours=1)).isoformat(),  # ✅ 종료 시간 +1시간
                 "timeZone": "Asia/Seoul"
             }
 
