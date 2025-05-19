@@ -74,8 +74,13 @@ async def trigger(request: Request):
                 calendar_result = f"❌ 캘린더 수정 실패: {e}"
 
             try:
-                update_notion_schedule(origin_title, origin_date, start_date, category)
-                notion_result = "✅ Notion 수정 완료"
+                notion_result = update_notion_schedule({
+                    "title": title,
+                    "start_date": start_date,
+                    "category": category,
+                    "origin_title": origin_title,
+                    "origin_date": origin_date
+                })
             except Exception as e:
                 notion_result = f"❌ Notion 수정 실패: {e}"
 
@@ -86,7 +91,11 @@ async def trigger(request: Request):
                 calendar_result = f"❌ 캘린더 삭제 실패: {e}"
 
             try:
-                notion_result = delete_from_notion(title, start_date, category)
+                notion_result = delete_from_notion({
+                    "title": title,
+                    "start_date": start_date,
+                    "category": category
+                })
             except Exception as e:
                 notion_result = f"❌ Notion 삭제 실패: {e}"
 
