@@ -43,11 +43,32 @@ def extract_category(text: str) -> str:
     return "기타"
 
 def extract_title(text: str) -> str:
-    text = re.sub(r"\d{1,2}[월.]\s*\d{1,2}[일.]?\s*(오전|오후)?\s*\d{1,2}시", "", text)
-    for cmd in REGISTER_KEYWORDS + DELETE_KEYWORDS + UPDATE_KEYWORDS + ["해줘", "해", "줘"]:
+    # 명령어 제거
+    command_patterns = REGISTER_KEYWORDS + DELETE_KEYWORDS + UPDATE_KEYWORDS + ["해줘", "해", "줘"]
+    for cmd in command_patterns:
         text = text.replace(cmd, "")
-    for suffix in ["에", "는", "을", "를", "도", "한테", "까지", "하고"]:
-        text = text.replace(suffix, "")
+
+    # 날짜, 시간, 접속어 제거
+    clean_patterns = [
+        r"\d{1,2}[월.]\s*\d{1,2}[일.]?",
+        r"(오전|오후)?\s*\d{1,2}시",
+        r"\d{1,2}시로",
+        r"로\s*잡힌",
+        r"에\s*잡힌",
+        r"로\s*예약",
+        r"\s+다시\s*",
+        r"\s*등록\s*",
+        r"\s*수정\s*",
+        r"\s*삭제\s*",
+    ]
+    for pattern in clean_patterns:
+        text = re.sub(pattern, "", text)
+
+    # 조사 제거
+    suffixes = ["에", "는", "을", "를", "도", "한테", "까지", "하고"]
+    for suf in suffixes:
+        text = text.replace(suf, "")
+
     return text.strip()
 
 def clarify_command(text: str) -> Dict[str, str]:
@@ -85,7 +106,7 @@ def clarify_command(text: str) -> Dict[str, str]:
                     temperature=0,
                 )
 
-                iso_date = response.choices[0].message.content.strip()
+                iso_date = response.choices[0].message.content.strip().strip("'\"")
                 parsed["start_date"] = iso_date
                 logger.info("[clarify] GPT 보정 성공 → %s", iso_date)
 
