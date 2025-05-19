@@ -55,20 +55,20 @@ def clarify_command(text: str) -> Dict:
     # ✅ category 판별
     category = classify_category(text)
 
-    # ✅ origin_date (정규식 기반 추출)
+    # ✅ origin_date 추출 (업데이트용)
     origin_date = ""
     origin_match = re.search(r"(?P<origin_time>\d{1,2}월\s*\d{1,2}일\s*(오전|오후)?\s*\d{1,2}시?)\s*로\s*잡힌", text)
     if origin_match:
         origin_time_str = origin_match.group("origin_time")
         origin_date = extract_datetime(origin_time_str) or ""
 
-    # ✅ origin_title (정규식 기반 추출)
+    # ✅ origin_title 추출 (업데이트용)
     origin_title = ""
-    title_match = re.search(r"잡힌\s*(?P<title>[\w\s가-힣]+?)\s*(을|를)?\s*(3시|수정|변경|바꿔|미뤄|조정|업데이트|앞당겨|늦게)", text)
+    title_match = re.search(r"잡힌\s*(?P<title>[\w\s가-힣]+?)\s*(을|를)?\s*(수정|변경|바꿔|미뤄|조정|업데이트|앞당겨|늦게)", text)
     if title_match:
         origin_title = title_match.group("title").strip()
 
-    # ✅ GPT를 통한 변경 후 날짜 추출
+    # ✅ GPT를 통한 날짜 보정
     start_date = ""
     time_prompt = f"'{text}'라는 문장에서 언급된 날짜/시간을 ISO 8601 형식으로 변환해줘.\n기준: 2025년 한국 시간 (Asia/Seoul), 결과는 예: '2025-05-20T14:00:00'\n결과는 한 줄짜리 ISO 날짜 문자열만 출력해줘. 설명 없이 결과만 줘."
     try:
@@ -78,11 +78,12 @@ def clarify_command(text: str) -> Dict:
         logger.error(f"[clarify] GPT 보정 실패: {e}")
         start_date = ""
 
-    # ✅ 최종 title 결정 (origin_title → fallback)
+    # ✅ title 추출 (업데이트가 아닐 경우 → 전체에서 마지막 키워드 앞 내용 추출)
     title = origin_title
-    if not title:
-        fallback_title_match = re.search(r"(?P<title>[\w\s가-힣]+?)\s*(을|를)?\s*(등록|삭제|수정|변경|기록|추가)", text)
-        title = fallback_title_match.group("title").strip() if fallback_title_match else ""
+    if not title and intent == "register_schedule":
+        fallback_match = re.search(r"\d{1,2}월\s*\d{1,2}일\s*(오전|오후)?\s*\d{1,2}시(.*?)(등록|추가|기록|메모)", text)
+        if fallback_match:
+            title = fallback_match.group(2).strip()
 
     return {
         "intent": intent,
@@ -92,4 +93,3 @@ def clarify_command(text: str) -> Dict:
         "origin_title": origin_title if intent == "update_schedule" else "",
         "origin_date": origin_date if intent == "update_schedule" else ""
     }
-
