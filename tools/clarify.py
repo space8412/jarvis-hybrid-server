@@ -78,21 +78,14 @@ def clarify_command(text: str) -> Dict:
         logger.error(f"[clarify] GPT 보정 실패: {e}")
         start_date = ""
 
-    # ✅ 최종 title 결정 (origin_title → fallback)
-    title = origin_title
-    if not title:
-        fallback_title_match = re.search(r"(?P<title>[\w\s가-힣]+?)\s*(을|를)?\s*(등록|삭제|수정|변경|기록|추가)", text)
-        title = fallback_title_match.group("title").strip() if fallback_title_match else ""
-
-    # ✅ fallback 실패 시 GPT 보정 추가
-    if not title:
-        logger.warning(f"[clarify] title fallback 실패 → GPT 보정 시도")
-        try:
-            title_prompt = f"'{text}'라는 문장에서 등록하려는 일정의 제목을 10자 이내로 추출해줘. 예: '후암동 회의'"
-            title = gpt_extract(title_prompt)
-        except Exception as e:
-            logger.error(f"[clarify] GPT title 보정 실패: {e}")
-            title = ""
+    # ✅ 최종 title은 GPT 보정으로 무조건 보완
+    try:
+        title_prompt = f"'{text}'라는 문장에서 등록하려는 일정의 제목만 10자 이내로 추출해줘. 예: '후암동 회의'"
+        title = gpt_extract(title_prompt)
+        logger.info(f"[clarify] GPT title 보정 성공 → {title}")
+    except Exception as e:
+        logger.error(f"[clarify] GPT title 보정 실패: {e}")
+        title = origin_title or ""
 
     return {
         "intent": intent,
