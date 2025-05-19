@@ -1,104 +1,90 @@
 import re
-import logging
-from typing import Dict, Optional
-from datetime import datetime
-import dateparser
+import openai
+import json
+from typing import Optional, Dict
 
-logger = logging.getLogger(__name__)
+def clarify_command(command: str) -> Dict[str, Optional[str]]:
+    def extract_command_details(command: str) -> Dict[str, Optional[str]]:
+        # 정규식을 사용하여 title, start_date, origin_date, intent, category, origin_title 추출 시도
+        title_pattern = r'title:\s*(.+?)\s*(?:,|$)'
+        start_date_pattern = r'start_date:\s*(\d{4}-\d{2}-\d{2})'
+        origin_date_pattern = r'origin_date:\s*(\d{4}-\d{2}-\d{2})'
+        intent_pattern = r'intent:\s*(.+?)\s*(?:,|$)'
+        category_pattern = r'category:\s*(.+?)\s*(?:,|$)'
+        origin_title_pattern = r'origin_title:\s*(.+?)\s*(?:,|$)'
 
-REGISTER_KEYWORDS = ["등록", "추가", "넣어", "잡아", "기록해", "예정", "메모", "잊지 말고", "남겨", "저장"]
-DELETE_KEYWORDS = ["삭제", "지워", "취소", "없애", "제거", "빼", "날려", "말소", "무시", "필요 없어", "제거해"]
-UPDATE_KEYWORDS = ["수정", "변경", "바꿔", "미뤄", "조정", "업데이트", "늦게", "앞당겨", "취소하고", "대신", "반영해"]
+        title_match = re.search(title_pattern, command)
+        start_date_match = re.search(start_date_pattern, command)
+        origin_date_match = re.search(origin_date_pattern, command)
+        intent_match = re.search(intent_pattern, command)
+        category_match = re.search(category_pattern, command)
+        origin_title_match = re.search(origin_title_pattern, command)
 
-CATEGORY_KEYWORDS = ["회의", "미팅", "약속", "상담", "콘텐츠", "개인", "시공", "공사"]
+        result = {
+            'title': title_match.group(1)[:20] if title_match else None,
+            'start_date': start_date_match.group(1) if start_date_match else None,
+            'origin_date': origin_date_match.group(1) if origin_date_match else None,
+            'intent': intent_match.group(1) if intent_match else None,
+            'category': category_match.group(1) if category_match else '기타',
+            'origin_title': origin_title_match.group(1) if origin_title_match else None
+        }
 
-def extract_datetime(text: str) -> Optional[str]:
-    dt = dateparser.parse(text, languages=["ko"], settings={"PREFER_DATES_FROM": "future"})
-    if dt:
-        return dt.isoformat()
-    return None
+        # intent가 register_schedule이면 origin_title과 origin_date는 None으로 고정
+        if result['intent'] == 'register_schedule':
+            result['origin_title'] = None
+            result['origin_date'] = None
 
-def classify_category(text: str) -> str:
-    for keyword in CATEGORY_KEYWORDS:
-        if keyword in text:
-            return keyword
-    return "기타"
+        # 정규식으로 추출에 실패한 경우, GPT 보정 로직 사용
+        if not all(result.values()):
+            result = gpt_correction(command)
 
-def clarify_command(text: str) -> Dict:
-    logger.warning(f"[clarify] dateparser 실패 → GPT 보정 시도: {text}")
-    from openai import OpenAI
-    import os
+        return result
 
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-    def gpt_extract(prompt: str) -> str:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            temperature=0,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
+    def gpt_correction(command: str) -> Dict[str, Optional[str]]:
+        # OpenAI API를 사용하여 title, start_date, origin_date, intent, category, origin_title 추출 시도
+        prompt = (
+            f"Extract title, start_date, origin_date, intent, category, and origin_title "
+            f"from the following command:\n\n{command}\n\n"
+            f"Format the response as a JSON object with keys "
+            f"'title', 'start_date', 'origin_date', 'intent', 'category', and 'origin_title'."
         )
-        return response.choices[0].message.content.strip()
 
-    # ✅ intent 판별
-    intent = "register_schedule"
-    for word in DELETE_KEYWORDS:
-        if word in text:
-            intent = "delete_schedule"
-            break
-    for word in UPDATE_KEYWORDS:
-        if word in text:
-            intent = "update_schedule"
-            break
-
-    # ✅ category 판별
-    category = classify_category(text)
-
-    # ✅ origin_date (정규식 보강 → 다양한 어미 허용)
-    origin_date = ""
-    origin_match = re.search(
-        r"(?P<origin_time>\d{1,2}월\s*\d{1,2}일\s*(오전|오후)?\s*\d{1,2}시?)\s*로\s*잡힌[\w\s가-힣]*", 
-        text
-    )
-    if origin_match:
-        origin_time_str = origin_match.group("origin_time")
-        origin_date = extract_datetime(origin_time_str) or ""
-
-    # ✅ origin_title (기존 유지)
-    origin_title = ""
-    title_match = re.search(r"잡힌\s*(?P<title>[\w\s가-힣]+?)\s*(을|를)?\s*(3시|수정|변경|바꿔|미뤄|조정|업데이트|앞당겨|늦게)", text)
-    if title_match:
-        origin_title = title_match.group("title").strip()
-
-    # ✅ GPT 시간 보정
-    start_date = ""
-    time_prompt = f"'{text}'라는 문장에서 언급된 날짜/시간을 ISO 8601 형식으로 변환해줘.\n기준: 2025년 한국 시간 (Asia/Seoul), 결과는 예: '2025-05-20T14:00:00'\n결과는 한 줄짜리 ISO 날짜 문자열만 출력해줘. 설명 없이 결과만 줘."
-    try:
-        start_date = gpt_extract(time_prompt)
-        logger.info(f"[clarify] GPT 보정 성공 → {start_date}")
-    except Exception as e:
-        logger.error(f"[clarify] GPT 보정 실패: {e}")
-        start_date = ""
-
-    # ✅ GPT title 보정
-    try:
-        title_prompt = (
-            f"'{text}'라는 문장에서 날짜나 시간 표현은 모두 제거하고, "
-            f"장소와 용도만 포함된 일정 제목을 한 줄로 추출해줘. "
-            f"예: '후암동 회의', '사무실 미팅', '고객 상담'. 결과는 제목만 출력해줘."
+        response = openai.Completion.create(
+            engine='text-davinci-003',
+            prompt=prompt,
+            max_tokens=100,
+            n=1,
+            stop=None,
+            temperature=0.7
         )
-        title = gpt_extract(title_prompt).strip().strip("'").strip('"')
-        logger.info(f"[clarify] GPT title 보정 최종 적용 → {title}")
-    except Exception as e:
-        logger.error(f"[clarify] GPT title 보정 실패: {e}")
-        title = origin_title or ""
 
-    return {
-        "intent": intent,
-        "title": title,
-        "start_date": start_date,
-        "category": category,
-        "origin_title": origin_title if intent == "update_schedule" else "",
-        "origin_date": origin_date if intent == "update_schedule" else ""
-    }
+        gpt_result = response.choices[0].text.strip()
+
+        try:
+            result = json.loads(gpt_result)
+        except json.JSONDecodeError:
+            result = {
+                'title': None,
+                'start_date': None,
+                'origin_date': None,
+                'intent': None,
+                'category': '기타',
+                'origin_title': None
+            }
+
+        # title 최대 20자 제한
+        if result['title']:
+            result['title'] = result['title'][:20]
+
+        # category가 없으면 기본값 '기타'로 설정
+        if not result['category']:
+            result['category'] = '기타'
+
+        # intent가 register_schedule이면 origin_title과 origin_date는 None으로 고정
+        if result['intent'] == 'register_schedule':
+            result['origin_title'] = None
+            result['origin_date'] = None
+
+        return result
+
+    return extract_command_details(command)
