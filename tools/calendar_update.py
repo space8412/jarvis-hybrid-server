@@ -35,6 +35,15 @@ calendar_service = build("calendar", "v3", credentials=creds)
 def normalize_title(title: str) -> str:
     return " ".join(title.lower().split())
 
+# ✅ 시간 비교 허용 함수 (±5분 이내)
+def is_same_time(t1_str: str, t2_str: str, minute_range=5) -> bool:
+    try:
+        t1 = datetime.fromisoformat(t1_str.replace(" ", "T"))
+        t2 = datetime.fromisoformat(t2_str.replace(" ", "T"))
+        return abs((t1 - t2).total_seconds()) <= minute_range * 60
+    except Exception:
+        return False
+
 # ✅ 일정 수정 API 재시도 래퍼
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def update_calendar_event(calendar_service, event_id, event_body):
@@ -66,12 +75,20 @@ def update_schedule(origin_title: str, origin_date: str, new_date: str, category
         ).execute()
 
         events = events_result.get("items", [])
-        expected_summary = normalize_title(f"[{category}] {origin_title}")
+        if not events:
+            logger.warning(f"⚠️ 해당 날짜({origin_day})에 등록된 일정이 없습니다.")
+            return {"status": "fail", "reason": "no events on that day"}
 
-        target_event = next(
-            (event for event in events if normalize_title(event["summary"]) == expected_summary),
-            None
-        )
+        origin_norm = normalize_title(origin_title)
+
+        # ✅ 일정 찾기 (title 포함 + ±5분 시간 차이 허용)
+        target_event = None
+        for event in events:
+            summary = normalize_title(event.get("summary", ""))
+            start_str = event["start"].get("dateTime") or event["start"].get("date")
+            if origin_norm in summary and is_same_time(start_str, origin_date):
+                target_event = event
+                break
 
         if not target_event:
             logger.warning(f"⚠️ '{origin_title}' 일정({origin_date})을 찾을 수 없습니다.")
@@ -84,7 +101,6 @@ def update_schedule(origin_title: str, origin_date: str, new_date: str, category
             old_end = datetime.fromisoformat(target_event["end"]["dateTime"])
             duration = old_end - old_start
 
-            # ✅ GPT에서 받은 시간 그대로 반영
             new_start = new_datetime
             new_end = new_start + duration
 
@@ -106,7 +122,6 @@ def update_schedule(origin_title: str, origin_date: str, new_date: str, category
                     ]
                 }
             }
-
         else:
             event_body = {
                 "summary": f"[{category}] {origin_title}",
