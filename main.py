@@ -19,7 +19,7 @@ from tools.notion_writer import (
 # ✅ .env 환경변수 로드
 load_dotenv()
 
-# ✅ 로그 레벨 설정
+# ✅ 로그 설정
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=getattr(logging, log_level))
 logger = logging.getLogger(__name__)
@@ -62,6 +62,7 @@ async def trigger(request: Request):
                 calendar_result = f"❌ 캘린더 등록 실패: {e}"
 
             try:
+                # ✅ Notion 등록은 여기서 단 한 번만 실행
                 notion_result = save_to_notion(parsed)
             except Exception as e:
                 notion_result = f"❌ Notion 등록 실패: {e}"
@@ -85,7 +86,7 @@ async def trigger(request: Request):
                 calendar_result = f"❌ 캘린더 삭제 실패: {e}"
 
             try:
-                notion_result = delete_from_notion(title, start_date, category)
+                notion_result = delete_from_notion(parsed)  # ✅ dict 전달 방식으로 수정
             except Exception as e:
                 notion_result = f"❌ Notion 삭제 실패: {e}"
 
