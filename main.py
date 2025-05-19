@@ -45,6 +45,10 @@ async def trigger(request: Request):
         msg_obj = body.get("message", {})
         message_text = msg_obj.get("text", "")
 
+        if not message_text:
+            logger.warning("[trigger] 입력된 메시지가 비어 있습니다.")
+            return {"status": "error", "message": "입력된 메시지가 없습니다."}
+
         logger.info(f"[trigger] 수신된 메시지: {message_text}")
         parsed = clarify_command(message_text)
         logger.debug(f"[trigger] clarify 결과: {parsed}")
@@ -162,8 +166,7 @@ async def agent(request: Request):
   "intent": "...",
   "category": "...",
   "origin_title": "..."
-}}
-"""
+}}"""
 
         response = client.chat.completions.create(
             model="gpt-4",
