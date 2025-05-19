@@ -72,9 +72,9 @@ def delete_from_notion(parsed_data: dict) -> dict:
             except Exception as e:
                 raise ValueError(f"❌ 날짜 파싱 실패: {e}")
 
-        # ✅ 시간 포함된 정확 일치 비교
         date_str = date.isoformat()
 
+        # ✅ 범위 조건으로 시간 포함된 일정도 삭제 가능하게 변경
         result = notion.databases.query(
             database_id=database_id,
             filter={
@@ -88,7 +88,8 @@ def delete_from_notion(parsed_data: dict) -> dict:
                     {
                         "property": "날짜",
                         "date": {
-                            "equals": date_str
+                            "on_or_after": date_str,
+                            "on_or_before": date_str
                         }
                     }
                 ]
@@ -97,6 +98,7 @@ def delete_from_notion(parsed_data: dict) -> dict:
 
         results = result.get("results", [])
         if not results:
+            logger.warning(f"🛑 삭제 대상 없음: 제목={title}, 날짜={date_str}")
             return {"status": "not_found", "message": f"일정 찾을 수 없음: {title} - {date_str}"}
 
         for page in results:
@@ -124,4 +126,3 @@ def update_notion_schedule(parsed_data: dict) -> dict:
 
     except Exception as e:
         logger.error(f"Notion 수정 오류: {e}")
-        return {"status": "error", "message": str(e)}
